@@ -90,7 +90,7 @@ start_link(SrcPort) ->
 
 %%  @doc
 %%  Starts the server and discovery.
-%%
+%%  @todo fix. Not working now.
 -spec start_discover_link() ->
     {ok, Pid :: pid()} |
     ignore |
@@ -102,7 +102,7 @@ start_discover_link() ->
 
 %%  @doc
 %%  Starts the server and discovery.
-%%
+%%  @todo fix. Not working now.
 -spec start_discover_link(
     SrcPort :: inet:port_number()
 ) ->
@@ -298,8 +298,11 @@ handle_event({call, From}, {find_device, all, ReturnFormat}, discovering, #state
 %
 %
 handle_event({call, From}, {find_device, Request}, discovering, #state{devices = Devices}) ->
-    Result =  erl_upnp_helper:filter_result(Devices, Request),
-    {keep_state_and_data, [{reply, From, {still_discovering, Result}}]};
+    Action = case erl_upnp_helper:filter_result(Devices, Request) of
+        false  -> postpone;
+        Result -> {reply, From, {still_discovering, Result}} % @todo Does `still_discovering` needed?
+    end,
+    {keep_state_and_data, [Action]};
 
 %--------------------------------------------------------------------
 %   All state events
