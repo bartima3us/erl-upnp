@@ -19,12 +19,13 @@
 %%  Search several results.
 %%
 filter_result(HierarchicalRes, Key) when is_list(HierarchicalRes) ->
-    lists:foldl(
-        fun
-            (Device, false) -> filter_result(Device, Key);
-            (_Device, Acc)  -> Acc
+    lists:filtermap(
+        fun (Device) ->
+            case filter_result(Device, Key) of
+                false -> false;
+                Data  -> {true, Data}
+            end
         end,
-        false,
         HierarchicalRes
     );
 

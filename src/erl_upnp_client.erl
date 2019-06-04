@@ -17,6 +17,8 @@
 -define(BROADCAST_PORT, 1900).
 
 -type device()  :: map().
+-type service() :: map().
+-type entity()  :: device() | service().
 -type target()  :: ssdp_all | upnp_rootdevice | {uuid, list()} | list().
 
 -record(state, {
@@ -129,14 +131,14 @@ start_discover(Pid, Delay, Target) ->
 
 
 %%  @doc
-%%  Find device from client's state by some criteria.
+%%  Find entity (device or service) from client's state by some criteria.
 %%
 -spec find_device(
     Pid         :: pid(),
     Request     :: list()
 ) ->
-    {ok, device() | false} |
-    {still_discovering, device() | false} |
+    {ok, [entity()] | false} |
+    {still_discovering, [entity()] | false} |
     {error, term()}.
 
 find_device(Pid, Request) ->
@@ -162,7 +164,7 @@ get_devices(Pid, ReturnFormat) ->
 %%  Return all unidentified devices from client's state.
 %%
 -spec get_unidentified_devices(
-    Pid             :: pid()
+    Pid :: pid()
 ) ->
     {ok, [term()]} |
     {still_discovering, [term()]} |
@@ -299,8 +301,8 @@ handle_event({call, From}, {find_device, all, ReturnFormat}, discovering, #state
 %
 handle_event({call, From}, {find_device, Request}, discovering, #state{devices = Devices}) ->
     Action = case erl_upnp_helper:filter_result(Devices, Request) of
-        false  -> postpone;
-        Result -> {reply, From, {still_discovering, Result}} % @todo Does `still_discovering` needed?
+        []     -> postpone;
+        Result -> {reply, From, {still_discovering, Result}}
     end,
     {keep_state_and_data, [Action]};
 
