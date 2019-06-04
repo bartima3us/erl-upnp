@@ -278,6 +278,11 @@ handle_event({call, From}, {find_device, unidentified}, discovering, #state{unid
 
 %
 %
+handle_event({call, _From}, {find_device, all, _Request}, discovering, #state{devices = []}) ->
+    {keep_state_and_data, [postpone]};
+
+%
+%
 handle_event({call, _From}, {find_device, _Request}, discovering, #state{devices = []}) ->
     {keep_state_and_data, [postpone]};
 
