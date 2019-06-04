@@ -39,7 +39,7 @@
     start_discover_link/0,
     start_discover_link/1,
     start_discover/3,
-    find_device/2,
+    find_entity/2,
     get_devices/2,
     get_unidentified_devices/1,
     get_port/1,
@@ -133,7 +133,7 @@ start_discover(Pid, Delay, Target) ->
 %%  @doc
 %%  Find entity (device or service) from client's state by some criteria.
 %%
--spec find_device(
+-spec find_entity(
     Pid         :: pid(),
     Request     :: list()
 ) ->
@@ -141,8 +141,8 @@ start_discover(Pid, Delay, Target) ->
     {still_discovering, [entity()] | false} |
     {error, term()}.
 
-find_device(Pid, Request) ->
-    gen_statem:call(Pid, {find_device, Request}).
+find_entity(Pid, Request) ->
+    gen_statem:call(Pid, {find_entity, Request}).
 
 
 %%  @doc
@@ -157,7 +157,7 @@ find_device(Pid, Request) ->
     {error, term()}.
 
 get_devices(Pid, ReturnFormat) ->
-    gen_statem:call(Pid, {find_device, all, ReturnFormat}).
+    gen_statem:call(Pid, {find_entity, all, ReturnFormat}).
 
 
 %%  @doc
@@ -171,7 +171,7 @@ get_devices(Pid, ReturnFormat) ->
     {error, term()}.
 
 get_unidentified_devices(Pid) ->
-    gen_statem:call(Pid, {find_device, unidentified}).
+    gen_statem:call(Pid, {find_entity, unidentified}).
 
 
 %%  @doc
@@ -249,10 +249,10 @@ callback_mode() ->
 %--------------------------------------------------------------------
 %   Waiting state
 %
-handle_event({call, From}, {find_device, all, _ReturnFormat}, waiting, _SD) ->
+handle_event({call, From}, {find_entity, all, _ReturnFormat}, waiting, _SD) ->
     {keep_state_and_data, [{reply, From, {error, discover_not_started}}]};
 
-handle_event({call, From}, {find_device, _Request}, waiting, _SD) ->
+handle_event({call, From}, {find_entity, _Request}, waiting, _SD) ->
     {keep_state_and_data, [{reply, From, {error, discover_not_started}}]};
 
 %--------------------------------------------------------------------
@@ -275,22 +275,22 @@ handle_event(state_timeout, stop_discover, discovering, SD) ->
 
 %
 %
-handle_event({call, From}, {find_device, unidentified}, discovering, #state{unidentified_devices = UD}) ->
+handle_event({call, From}, {find_entity, unidentified}, discovering, #state{unidentified_devices = UD}) ->
     {keep_state_and_data, [{reply, From, {still_discovering, UD}}]};
 
 %
 %
-handle_event({call, _From}, {find_device, all, _Request}, discovering, #state{devices = []}) ->
+handle_event({call, _From}, {find_entity, all, _Request}, discovering, #state{devices = []}) ->
     {keep_state_and_data, [postpone]};
 
 %
 %
-handle_event({call, _From}, {find_device, _Request}, discovering, #state{devices = []}) ->
+handle_event({call, _From}, {find_entity, _Request}, discovering, #state{devices = []}) ->
     {keep_state_and_data, [postpone]};
 
 %
 %
-handle_event({call, From}, {find_device, all, ReturnFormat}, discovering, #state{devices = Devices}) ->
+handle_event({call, From}, {find_entity, all, ReturnFormat}, discovering, #state{devices = Devices}) ->
     Result = case ReturnFormat of
         hierarchical -> Devices;
         flat         -> lists:map(fun (D) -> erl_upnp_helper:flatten_result(D) end, Devices)
@@ -299,7 +299,7 @@ handle_event({call, From}, {find_device, all, ReturnFormat}, discovering, #state
 
 %
 %
-handle_event({call, From}, {find_device, Request}, discovering, #state{devices = Devices}) ->
+handle_event({call, From}, {find_entity, Request}, discovering, #state{devices = Devices}) ->
     Action = case erl_upnp_helper:filter_result(Devices, Request) of
         []     -> postpone;
         Result -> {reply, From, {still_discovering, Result}}
@@ -356,12 +356,12 @@ handle_event(cast, {message_parsed, {unidentified, Device}}, _, SD) ->
 
 %
 %
-handle_event({call, From}, {find_device, unidentified}, _, #state{unidentified_devices = UD}) ->
+handle_event({call, From}, {find_entity, unidentified}, _, #state{unidentified_devices = UD}) ->
     {keep_state_and_data, [{reply, From, {ok, UD}}]};
 
 %
 %
-handle_event({call, From}, {find_device, all, ReturnFormat}, _, #state{devices = Devices}) ->
+handle_event({call, From}, {find_entity, all, ReturnFormat}, _, #state{devices = Devices}) ->
     Result = case ReturnFormat of
         hierarchical -> Devices;
         flat         -> lists:map(fun (D) -> erl_upnp_helper:flatten_result(D) end, Devices)
@@ -370,7 +370,7 @@ handle_event({call, From}, {find_device, all, ReturnFormat}, _, #state{devices =
 
 %
 %
-handle_event({call, From}, {find_device, Request}, _, #state{devices = Devices}) ->
+handle_event({call, From}, {find_entity, Request}, _, #state{devices = Devices}) ->
     Result = erl_upnp_helper:filter_result(Devices, Request),
     {keep_state_and_data, [{reply, From, {ok, Result}}]};
 
