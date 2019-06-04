@@ -10,6 +10,6 @@ UPnP architecture and specification documents: https://openconnectivity.org/deve
 {ok, Pid} = erl_upnp_client:start_link().
 erl_upnp_client:start_discover(Pid, 10, ssdp_all).
 erl_upnp_client:find_devices(Pid, flat).
-erl_upnp_client:find_device(Pid, "InternetGatewayDevice:2").
-erl_upnp_client:find_device(Pid, "ConnectionManager").
+erl_upnp_client:find_entity(Pid, "InternetGatewayDevice:2").
+erl_upnp_client:find_entity(Pid, "ConnectionManager").
 ```
