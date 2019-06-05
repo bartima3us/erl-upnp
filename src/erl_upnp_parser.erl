@@ -226,12 +226,14 @@ get_device_info(Namespace, Location, DeviceContent) ->
             % Get embedded services info
             ({Tag, _, Content}, Acc0 = #{device := DevInfo0}) when Tag =:= ServiceListTag ->
                 ParentUDN = proplists:get_value("UDN", DevInfo0, undefined),
+                ParentDevType = proplists:get_value("deviceType", DevInfo0, undefined),
                 CurrServices = proplists:get_value("services", DevInfo0, []),
                 DevInfo1 = proplists:delete("services", DevInfo0),
                 NewEmbServ = lists:foldl(
                     fun (Serv, Acc1) ->
                         EmbServContent = get_content_by_tag(Namespace ++ "service", Serv),
-                        [get_service_info(Namespace, Location, EmbServContent, ParentUDN) | Acc1]
+                        ExtraData = [{"parentUDN", ParentUDN}, {"parentDeviceType", ParentDevType}],
+                        [get_service_info(Namespace, Location, EmbServContent, ExtraData) | Acc1]
                     end,
                     [],
                     Content
@@ -272,7 +274,7 @@ get_device_info(Namespace, Location, DeviceContent) ->
 %%  @private
 %%  Convert services XML to maps list.
 %%
-get_service_info(Namespace, Location, ServiceContent, ParentUDN) ->
+get_service_info(Namespace, Location, ServiceContent, ExtraData) ->
     #{service := ServiceNewInfo} = lists:foldl(
         fun
             ({Tag, _, [Content0]}, #{service := AccServiceInfo}) ->
@@ -290,7 +292,7 @@ get_service_info(Namespace, Location, ServiceContent, ParentUDN) ->
         #{service => []},
         ServiceContent
     ),
-    #{service => [{"parentUDN", ParentUDN} | ServiceNewInfo]}.
+    #{service => ExtraData ++ ServiceNewInfo}.
 
 
 %%  @private

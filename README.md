@@ -7,9 +7,16 @@ Based on that fact it has only automated port forwarding and subscription. Other
 UPnP architecture and specification documents: https://openconnectivity.org/developer/specifications/upnp-resources/upnp
 
 ```
+{ok, Pid} = erl_upnp_client:start_discover_link(10, ssdp_all).
+```
+
+```
 {ok, Pid} = erl_upnp_client:start_link().
 erl_upnp_client:start_discover(Pid, 10, ssdp_all).
-erl_upnp_client:find_devices(Pid, flat).
+```
+
+```
+erl_upnp_client:get_devices(Pid, flat).
 erl_upnp_client:find_entity(Pid, "InternetGatewayDevice:2").
 erl_upnp_client:find_entity(Pid, "ConnectionManager").
 ```

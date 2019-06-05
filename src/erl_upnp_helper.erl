@@ -16,22 +16,22 @@
 ]).
 
 %%  @doc
-%%  Search several results.
+%%  Search entity.
 %%
 filter_result(HierarchicalRes, Key) when is_list(HierarchicalRes) ->
-    lists:filtermap(
+    lists:flatten(lists:filtermap(
         fun (Device) ->
             case filter_result(Device, Key) of
-                false -> false;
-                Data  -> {true, Data}
+                []   -> false;
+                Data -> {true, Data}
             end
         end,
         HierarchicalRes
-    );
+    ));
 
 
 %%  @doc
-%%  Search single result.
+%%  Search entity.
 %%
 filter_result(HierarchicalRes, Key) ->
     %
@@ -56,42 +56,33 @@ filter_result(HierarchicalRes, Key) ->
     Search = fun (Dev = #{device := DevInfo}) ->
         case Compare(proplists:get_value("deviceType", DevInfo)) of
             true  ->
-                Dev;
+                [Dev];
             false ->
                 lists:foldl(
                     fun
-                        (Serv = #{service := ServInfo}, false) ->
+                        (Serv = #{service := ServInfo}, Acc) ->
                             case Compare(proplists:get_value("serviceType", ServInfo)) of
-                                false -> false;
-                                true  -> Serv
+                                false -> Acc;
+                                true  -> [Serv | Acc]
                             end;
                         (_, Serv) ->
                             Serv
                     end,
-                    false,
+                    [],
                     proplists:get_value("services", DevInfo)
                 )
         end
     end,
-    % @todo search from hierarchical list in order to keep embedded devices
-    case Search(HierarchicalRes) of
-        false ->
-            FlatRes = flatten_result(HierarchicalRes),
-            #{device := TopDev1} = FlatRes,
-            Res = lists:foldl(
-                fun
-                    (EmbDev, false)  -> Search(EmbDev);
-                    (_, FoundEntity) -> FoundEntity
-                end,
-                false,
-                proplists:get_value("embedded_devices", TopDev1)
-            ),
-            Res;
-        #{device := FoundDev} ->
-            #{device => proplists:delete("embedded_devices", FoundDev)};
-        FoundService ->
-            FoundService
-    end.
+    IterationFun = fun
+        IterateFun([], Acc) ->
+            Acc;
+        IterateFun([Dev = #{device := DevInfo} | OtherDevs], Acc) ->
+            EmbeddedDevs = proplists:get_value("embedded_devices", DevInfo, []),
+            Result = Search(Dev),
+            IterateFun(OtherDevs ++ EmbeddedDevs, Acc ++ Result)
+    end,
+    IterationFun([HierarchicalRes], []).
+
 
 %%  @doc
 %%  Make flat result from hierarchical.
