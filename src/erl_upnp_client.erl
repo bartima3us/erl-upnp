@@ -298,7 +298,6 @@ handle_event(internal, start, discovering, SD) ->
 %
 %
 handle_event(state_timeout, stop_discover, discovering, SD) ->
-    io:format("Discovery stopped.~n"),
     {next_state, open, SD};
 
 %
@@ -338,7 +337,6 @@ handle_event({call, From}, {find_entity, Request}, discovering, #state{devices =
 %   All state events
 %
 handle_event(cast, {start_discover, Delay, Target}, _, SD) ->
-    io:format("Discovery started.~n"),
     NewSD = SD#state{
         delay        = Delay,
         last_target  = Target
