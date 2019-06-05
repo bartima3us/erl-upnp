@@ -70,6 +70,9 @@ Events which should be handled in the attached handler:
 - ```{raw_entity_discovered, Data}```
 - ```{device_discovered, Data}```
 
+Subscription
+-----
+
 Port mapper (IGD)
 -----
 
