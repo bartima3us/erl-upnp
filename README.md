@@ -29,13 +29,13 @@ Start client and network discovering in one step
 - ```Target :: {uuid, list()}``` Returns device with concrete UUID. UUID example: "429ec14c-8e4a-4074-89cc-01fc84e31e1f"
 - ```Target :: list()``` Some custom search request. Example: "urn:schemas-upnp-org:service:Layer3Forwarding:1"
 
-Return all entities from the state
+Returns all entities from the state
 ```
 erl_upnp_client:get_devices(ClientPid, ReturnFormat).
 ```
 
-- ```ReturnFormat :: hierarchical``` Return all devices and entities in their original places from hierarchical point of view.
-- ```ReturnFormat :: flat``` Return all embedded devices in one list.
+- ```ReturnFormat :: hierarchical``` Returns all devices and entities in their original places from hierarchical point of view.
+- ```ReturnFormat :: flat``` Returns all embedded devices in one list.
 
 Find entities in the state by the key
 ```
@@ -45,12 +45,12 @@ erl_upnp_client:find_entity(ClientPid, Key).
 
 - ```Key :: list()``` Key is a device or service type with or without version. Key examples: "InternetGatewayDevice", "Layer3Forwarding:1", "WANDevice:2"
 
-Return all unidentified entities
+Returns all unidentified entities
 ```
 erl_upnp_client:get_unidentified_devices(ClientPid).
 ```
 
-Return a port which control point (client) is using as a source port
+Returns a port which control point (client) is using as a source port
 ```
 erl_upnp_gen_client:get_port(ClientPid)
 ```
