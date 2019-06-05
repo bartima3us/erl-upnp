@@ -73,6 +73,7 @@ filter_result(HierarchicalRes, Key) ->
                 )
         end
     end,
+    % @todo search from hierarchical list in order to keep embedded devices
     case Search(HierarchicalRes) of
         false ->
             FlatRes = flatten_result(HierarchicalRes),

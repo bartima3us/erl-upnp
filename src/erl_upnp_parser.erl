@@ -11,7 +11,7 @@
 
 %% API
 -export([
-    start_link/0,
+    start_link/1,
     parse_message/5
 ]).
 
@@ -26,7 +26,7 @@
 ]).
 
 -record(state, {
-    devices = []
+    event_mgr_pid   :: pid()
 }).
 
 
@@ -37,8 +37,8 @@
 %%  @doc
 %%  Start a parser.
 %%
-start_link() ->
-    gen_server:start_link(?MODULE, [], []).
+start_link(EventMgrPid) ->
+    gen_server:start_link(?MODULE, [EventMgrPid], []).
 
 
 %%  @doc
@@ -63,8 +63,8 @@ parse_message(Pid, From, Message, DstIp, DstPort) ->
 %%                     {stop, Reason}
 %% @end
 %%--------------------------------------------------------------------
-init([]) ->
-    {ok, #state{}}.
+init([EventMgrPid]) ->
+    {ok, #state{event_mgr_pid = EventMgrPid}}.
 
 
 %%--------------------------------------------------------------------
@@ -95,36 +95,41 @@ handle_call(_Request, _From, State) ->
 %% @end
 %%--------------------------------------------------------------------
 handle_cast({parse_message, From, Message, DstIp, DstPort}, State) ->
-    Lines = re:split(Message, "\\r\\n"),
+    #state{
+        event_mgr_pid = EventMgrPid
+    } = State,
+    Lines = re:split(Message, "\\r\\n", [{return, list}]),
     Info = lists:foldl(
         fun
-            (<<>>, Acc) ->
+            ("", Acc) ->
                 Acc;
-            (<<"HTTP/1.1 200 OK">>, Acc) ->
+            ("HTTP/1.1 200 OK", Acc) ->
                 Acc;
             (Line, Acc) ->
-                case re:split(Line, ":", [trim, {parts, 2}]) of
-                    [Key, Val] -> Acc#{Key => string:trim(Val)};
-                    [Key]      -> Acc#{Key => <<>>};
+                case re:split(Line, ":", [trim, {parts, 2}, {return, list}]) of
+                    [Key, Val] -> [{Key, string:trim(Val)} | Acc];
+                    [Key]      -> [{Key, ""} | Acc];
                     _          -> Acc
                 end
         end,
-        #{},
+        [],
         Lines
     ),
-    Result = case maps:get(<<"LOCATION">>, Info, undefined) of
+    Result = case proplists:get_value("LOCATION", Info) of
         undefined ->
-            {unidentified, Message}; % @todo need to think
-        Location0  ->
-            Location1 = binary_to_list(Location0),
-            {ok, {{_V, _C, _RP}, _Headers, Body}} = httpc:request(get, {Location1, []}, [], [{body_format, binary}]),
+            ok = gen_event:notify(EventMgrPid, {raw_entity_discovered, Info}),
+            {unidentified, Info};
+        Location  ->
+            {ok, {{_V, _C, _RP}, _Headers, Body}} = httpc:request(get, {Location, []}, [], [{body_format, binary}]),
             {ok, Description, _} = erlsom:simple_form(Body),
             Namespace = derive_namespace(Description),
             RootContent = get_content_by_tag(Namespace ++ "root", Description),
             [DeviceContent] = get_content_by_tag(Namespace ++ "device", RootContent),
-            HierarchicalRes = #{device := Dev} = get_device_info(Namespace, Location1, DeviceContent),
-            ExtraData = [{"LOCATION", Location1}, {"sender_ip", DstIp}, {"sender_port", DstPort}],
-            {identified, HierarchicalRes#{device => ExtraData ++ Dev}}
+            HierarchicalRes = #{device := Dev} = get_device_info(Namespace, Location, DeviceContent),
+            ExtraData = [{"LOCATION", Location}, {"sender_ip", DstIp}, {"sender_port", DstPort}],
+            NewDevice = HierarchicalRes#{device => ExtraData ++ Dev},
+            ok = gen_event:notify(EventMgrPid, {device_discovered, NewDevice}),
+            {identified, NewDevice}
     end,
     ok = erl_upnp_client:message_parsed(From, Result),
     {noreply, State}.
@@ -220,12 +225,13 @@ get_device_info(Namespace, Location, DeviceContent) ->
             %
             % Get embedded services info
             ({Tag, _, Content}, Acc0 = #{device := DevInfo0}) when Tag =:= ServiceListTag ->
+                ParentUDN = proplists:get_value("UDN", DevInfo0, undefined),
                 CurrServices = proplists:get_value("services", DevInfo0, []),
                 DevInfo1 = proplists:delete("services", DevInfo0),
                 NewEmbServ = lists:foldl(
                     fun (Serv, Acc1) ->
                         EmbServContent = get_content_by_tag(Namespace ++ "service", Serv),
-                        [get_service_info(Namespace, Location, EmbServContent) | Acc1]
+                        [get_service_info(Namespace, Location, EmbServContent, ParentUDN) | Acc1]
                     end,
                     [],
                     Content
@@ -266,8 +272,8 @@ get_device_info(Namespace, Location, DeviceContent) ->
 %%  @private
 %%  Convert services XML to maps list.
 %%
-get_service_info(Namespace, Location, ServiceContent) ->
-    lists:foldl(
+get_service_info(Namespace, Location, ServiceContent, ParentUDN) ->
+    #{service := ServiceNewInfo} = lists:foldl(
         fun
             ({Tag, _, [Content0]}, #{service := AccServiceInfo}) ->
                 Key = re:replace(Tag, Namespace, "", [{return, list}]),
@@ -283,7 +289,8 @@ get_service_info(Namespace, Location, ServiceContent) ->
         end,
         #{service => []},
         ServiceContent
-    ).
+    ),
+    #{service => [{"parentUDN", ParentUDN} | ServiceNewInfo]}.
 
 
 %%  @private

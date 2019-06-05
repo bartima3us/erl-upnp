@@ -15,6 +15,7 @@
 
 -define(BROADCAST_IP, {239, 255, 255, 250}).
 -define(BROADCAST_PORT, 1900).
+-define(DELAY(S), S * 1000 + 100).
 
 -type device()  :: map().
 -type service() :: map().
@@ -36,13 +37,14 @@
 -export([
     start_link/0,
     start_link/1,
-    start_discover_link/0,
-    start_discover_link/1,
+    start_discover_link/2,
+    start_discover_link/3,
     start_discover/3,
     find_entity/2,
     get_devices/2,
     get_unidentified_devices/1,
     get_port/1,
+    get_event_mgr_pid/1,
     stop/1
 ]).
 
@@ -73,7 +75,7 @@
     {error, Error :: term()}.
 
 start_link() ->
-    gen_statem:start_link(?MODULE, [0, waiting], []).
+    gen_statem:start_link(?MODULE, [0, waiting, undefined, undefined], []).
 
 
 %%  @doc
@@ -87,33 +89,38 @@ start_link() ->
     {error, Error :: term()}.
 
 start_link(SrcPort) ->
-    gen_statem:start_link(?MODULE, [SrcPort, waiting], []).
+    gen_statem:start_link(?MODULE, [SrcPort, waiting, undefined, undefined], []).
 
 
 %%  @doc
 %%  Starts the server and discovery.
-%%  @todo fix. Not working now.
--spec start_discover_link() ->
-    {ok, Pid :: pid()} |
-    ignore |
-    {error, Error :: term()}.
-
-start_discover_link() ->
-    gen_statem:start_link(?MODULE, [0, discovering], []).
-
-
-%%  @doc
-%%  Starts the server and discovery.
-%%  @todo fix. Not working now.
+%%
 -spec start_discover_link(
-    SrcPort :: inet:port_number()
+    Delay   :: pos_integer(),
+    Target  :: target()
 ) ->
     {ok, Pid :: pid()} |
     ignore |
     {error, Error :: term()}.
 
-start_discover_link(SrcPort) ->
-    gen_statem:start_link(?MODULE, [SrcPort, discovering], []).
+start_discover_link(Delay, Target) ->
+    gen_statem:start_link(?MODULE, [0, discovering, Delay, Target], []).
+
+
+%%  @doc
+%%  Starts the server and discovery.
+%%
+-spec start_discover_link(
+    SrcPort :: inet:port_number(),
+    Delay   :: pos_integer(),
+    Target  :: target()
+) ->
+    {ok, Pid :: pid()} |
+    ignore |
+    {error, Error :: term()}.
+
+start_discover_link(SrcPort, Delay, Target) ->
+    gen_statem:start_link(?MODULE, [SrcPort, discovering, Delay, Target], []).
 
 
 %%  @doc
@@ -187,6 +194,18 @@ get_port(Pid) ->
 
 
 %%  @doc
+%%  Returns event manager pid.
+%%
+-spec get_event_mgr_pid(
+    Pid :: pid()
+) ->
+    pid().
+
+get_event_mgr_pid(Pid) ->
+    gen_statem:call(Pid, get_event_mgr_pid).
+
+
+%%  @doc
 %%  Stops the client.
 %%
 -spec stop(
@@ -218,20 +237,29 @@ message_parsed(Pid, Data) ->
 %%
 %%
 %%
-init([SrcPort, NextAction]) ->
+init([SrcPort, NextAction, Delay, Target]) ->
     {ok, Socket} = gen_udp:open(SrcPort, [binary, {active, once}]),
     {ok, Port} = inet:port(Socket),
-    {ok, ParserPid} = erl_upnp_parser:start_link(),
+    {ok, EventMgrPid} = gen_event:start_link(),
+    {ok, ParserPid} = erl_upnp_parser:start_link(EventMgrPid),
     State = #state{
-        socket      = Socket,
-        src_port    = Port,
-        parser_pid  = ParserPid
+        socket          = Socket,
+        src_port        = Port,
+        parser_pid      = ParserPid,
+        delay           = Delay,
+        last_target     = decode_target(Target),
+        event_mgr_pid   = EventMgrPid
     },
-    NextActions = case NextAction of
-        waiting     -> [];
-        discovering -> [{next_event, internal, discovering}]
-    end,
-    {ok, waiting, State, NextActions}.
+    case NextAction of
+        waiting     ->
+            {ok, waiting, State};
+        discovering ->
+            Actions = [
+                {next_event, internal, start},
+                {state_timeout, ?DELAY(Delay), stop_discover}
+            ],
+            {ok, discovering, State, Actions}
+    end.
 
 
 %%
@@ -317,7 +345,7 @@ handle_event(cast, {start_discover, Delay, Target}, _, SD) ->
     },
     Actions = [
         {next_event, internal, start},
-        {state_timeout, Delay * 1000 + 100, stop_discover}
+        {state_timeout, ?DELAY(Delay), stop_discover}
     ],
     {next_state, discovering, NewSD, Actions};
 
@@ -349,8 +377,9 @@ handle_event(cast, {message_parsed, {unidentified, Device}}, _, SD) ->
     #state{
         unidentified_devices = UD
     } = SD,
+    DevId = proplists:get_value("USN", Device),
     NewSD = SD#state{
-        unidentified_devices = [Device | UD] % @todo check for uniqueness
+        unidentified_devices = [{DevId, Device} | proplists:delete(DevId, UD)]
     },
     {keep_state, NewSD};
 
@@ -378,6 +407,11 @@ handle_event({call, From}, {find_entity, Request}, _, #state{devices = Devices})
 %
 handle_event({call, From}, get_port, _, #state{src_port = Port}) ->
     {keep_state_and_data, [{reply, From, Port}]};
+
+%
+%
+handle_event({call, From}, get_event_mgr_pid, _, #state{event_mgr_pid = Pid}) ->
+    {keep_state_and_data, [{reply, From, Pid}]};
 
 %
 %
@@ -417,6 +451,7 @@ discover(Socket, BroadcastIp, BroadcastPort, Target, Delay) ->
 %%  @private
 %%  Decode search target.
 %%
+decode_target(undefined)                    -> undefined;
 decode_target(ssdp_all)                     -> "ssdp:all";
 decode_target(upnp_rootdevice)              -> "upnp:rootdevice";
 decode_target({uuid, Uuid})                 -> "uuid:" ++ Uuid;
