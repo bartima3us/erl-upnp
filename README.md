@@ -24,18 +24,18 @@ Start client and network discovering in one step
 - ```Delay :: pos_integer()``` Time (in **seconds**) by which network should send responses. It is needed to avoid packets flood (network congestion). Recommended: 2.
 
 
-- ```Target :: ssdp_all``` Returns all UPnP compatible devices and services from the network.
-- ```Target :: upnp_rootdevice``` Returns all UPnP root devices from the network.
-- ```Target :: {uuid, list()}``` Returns device with concrete UUID. UUID example: "429ec14c-8e4a-4074-89cc-01fc84e31e1f"
+- ```Target :: ssdp_all``` Return all UPnP compatible devices and services from the network.
+- ```Target :: upnp_rootdevice``` Return all UPnP root devices from the network.
+- ```Target :: {uuid, list()}``` Return device with concrete UUID. UUID example: "429ec14c-8e4a-4074-89cc-01fc84e31e1f"
 - ```Target :: list()``` Some custom search request. Example: "urn:schemas-upnp-org:service:Layer3Forwarding:1"
 
-Returns all entities from the state
+Return all entities from the state
 ```
 erl_upnp_client:get_devices(ClientPid, ReturnFormat).
 ```
 
-- ```ReturnFormat :: hierarchical``` Returns all devices and entities in their original places from hierarchical point of view.
-- ```ReturnFormat :: flat``` Returns all embedded devices in one list.
+- ```ReturnFormat :: hierarchical``` Return all devices and entities in their original places from hierarchical point of view.
+- ```ReturnFormat :: flat``` Return all embedded devices in one list.
 
 Find entities in the state by the key
 ```
@@ -45,19 +45,19 @@ erl_upnp_client:find_entity(ClientPid, Key).
 
 - ```Key :: list()``` Key is a device or service type with or without version. Key examples: "InternetGatewayDevice", "Layer3Forwarding:1", "WANDevice:2"
 
-Returns all unidentified entities
+Return all unidentified entities
 ```
 erl_upnp_client:get_unidentified_devices(ClientPid).
 ```
 
-Returns a port which control point (client) is using as a source port
+Return a port which control point (client) is using as a source port
 ```
-erl_upnp_gen_client:get_port(ClientPid)
+erl_upnp_client:get_port(ClientPid)
 ```
 
 Stop the client
 ```
-erl_upnp_gen_client:stop(ClientPid)
+erl_upnp_client:stop(ClientPid)
 ```
 
 Attach event handler to client event manager and get data about new entities as soon as they are discovered.
@@ -73,7 +73,7 @@ Events which should be handled in the attached handler:
 Subscription
 -----
 
-Port mapper (IGD)
+Port forwarding (IGD)
 -----
 
 Extending
