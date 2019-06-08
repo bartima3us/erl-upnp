@@ -71,6 +71,8 @@ Events which should be handled in the attached handler:
 
 ## Subscription
 
+TODO
+
 ## Port forwarding (IGD)
 
 Start the client
@@ -123,4 +125,8 @@ erl_upnp_igd:delete_port_mapping(ClientPid, "", 6020, tcp).
 
 ## Extending
 
+TODO
+
 ## Tests
+
+TODO
