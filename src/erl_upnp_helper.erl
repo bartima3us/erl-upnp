@@ -145,11 +145,13 @@ make_request(ClientPid, ControlUrl, Action, ServiceType, Args) ->
     Headers = [
         {"SOAPAction",          "\"" ++ ServiceType ++ "#" ++ Action ++ "\""},
         {"Host",                inet:ntoa(get_internal_ip()) ++ ":" ++ integer_to_list(Port)},
-        {"Content-Length",      length(Body)},
-        {"TRANSFER-ENCODING",   "\"chunked\""}
+        {"Content-Length",      length(Body)}
+%%        {"TRANSFER-ENCODING",   "\"chunked\""} % Not working with some services, for example RenderingControl
     ],
-    {ok, {_S, _H, Resp}}= httpc:request(post, {ControlUrl, Headers, "application/xml; charset=\"utf-8\"", Body}, [], []),
-    Resp.
+    case httpc:request(post, {ControlUrl, Headers, "application/xml; charset=\"utf-8\"", Body}, [], []) of
+        {ok, {_S, _H, Resp}} -> Resp;
+        {error, Error}       -> {error, Error}
+    end.
 
 
 %%  @doc

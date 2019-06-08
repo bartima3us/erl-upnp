@@ -29,13 +29,13 @@
 
 -type action_response() :: [
     {ServiceType :: list(),
-        SOAPResponse :: list() | {error, {no_action, Action :: list()}}}
+        SOAPResponse :: list() | {error, term()}}
 ].
 
 -define(COMPATIBLE_SERVICES, [
-    "urn:schemas-upnp-org:service:WANIPConnection:1",
-    "urn:schemas-upnp-org:service:WANIPConnection:2",
-    "urn:schemas-upnp-org:service:WANPPPConnection:1"
+    "urn:schemas-upnp-org:service:WANIPConnection:1", % http://upnp.org/specs/gw/UPnP-gw-WANIPConnection-v1-Service.pdf
+    "urn:schemas-upnp-org:service:WANIPConnection:2", % http://upnp.org/specs/gw/UPnP-gw-WANIPConnection-v2-Service.pdf
+    "urn:schemas-upnp-org:service:WANPPPConnection:1" % http://upnp.org/specs/gw/UPnP-gw-WANPPPConnection-v1-Service.pdf
 ]).
 
 -define(ADD_PORT_MAPPING(NRH, NEP, NIP, NP, NIC, NE, NPMD, NLD), [
@@ -349,7 +349,7 @@ handle_event({call, From}, Request, open, SD) when
 %%
 encode_args(Arg) when is_list(Arg)      -> Arg;
 encode_args(Arg) when is_integer(Arg)   -> integer_to_list(Arg);
-encode_args(Arg) when is_binary(Arg)    -> list_to_binary(Arg);
+encode_args(Arg) when is_binary(Arg)    -> binary_to_list(Arg);
 encode_args(Arg) when is_tuple(Arg)     -> inet:ntoa(Arg);
 encode_args(tcp)                        -> "TCP";
 encode_args(udp)                        -> "UDP".
