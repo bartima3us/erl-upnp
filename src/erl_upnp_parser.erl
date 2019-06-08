@@ -25,6 +25,15 @@
     code_change/3
 ]).
 
+-ifdef(TEST).
+-export([
+    derive_namespace/1,
+    get_content_by_tag/2,
+    get_device_info/3,
+    fix_address/2
+]).
+-endif.
+
 -record(state, {
     event_mgr_pid   :: pid()
 }).
