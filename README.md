@@ -133,7 +133,7 @@ erl_upnp_igd:delete_port_mapping(ClientPid, "", 6020, tcp).
 
 Stop the client
 ```
-erl_upnp_igd:stop(ClientPid)
+erl_upnp_igd:stop(ClientPid).
 ```
 
 ## <a name="extending">Extending</a> ##
