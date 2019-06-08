@@ -144,7 +144,7 @@ Helpers to make request can be found in erl_upnp_helper module.<br/>
 
 ## <a name="tests">Tests</a> ##
 
-EUnit tests
+EUnit and CT tests
 ```
 $ make tests
 ```

@@ -14,8 +14,6 @@
 -behavior(gen_statem).
 -include("erl_upnp.hrl").
 
--define(BROADCAST_IP, {239, 255, 255, 250}).
--define(BROADCAST_PORT, 1900).
 -define(DELAY(S), S * 1000 + 100).
 
 -type target()  :: ssdp_all | upnp_rootdevice | {uuid, list()} | list().
@@ -290,7 +288,9 @@ handle_event(internal, start, discovering, SD) ->
         last_target = Target,
         delay       = Delay
     } = SD,
-    ok = discover(Socket, ?BROADCAST_IP, ?BROADCAST_PORT, Target, Delay),
+    BroadcastIP = erl_upnp_helper:get_broadcast_ip(),
+    BroadcastPort = erl_upnp_helper:get_broadcast_port(),
+    ok = discover(Socket, BroadcastIP, BroadcastPort, Target, Delay),
     keep_state_and_data;
 
 %

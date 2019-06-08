@@ -15,7 +15,9 @@
     flatten_result/1,
     form_request/4,
     make_request/5,
-    get_internal_ip/0
+    get_internal_ip/0,
+    get_broadcast_ip/0,
+    get_broadcast_port/0
 ]).
 
 %%  @doc
@@ -169,5 +171,19 @@ make_request(ClientPid, ControlUrl, Action, ServiceType, Args) ->
 get_internal_ip() ->
     {ok, L} = inet:getif(),
     element(1, hd(L)).
+
+
+%%  @doc
+%%  Get broadcast IP. Moved to function for mocking purposes.
+%%
+get_broadcast_ip() ->
+    {239, 255, 255, 250}.
+
+
+%%  @doc
+%%  Get broadcast port. Moved to function for mocking purposes.
+%%
+get_broadcast_port() ->
+    1900.
 
 
