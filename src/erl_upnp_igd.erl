@@ -322,8 +322,11 @@ handle_event({call, From}, Request, open, SD) when
             ControlUrl = proplists:get_value("controlURL", Service),
             ServiceType = proplists:get_value("serviceType", Service),
             case proplists:get_value(ServiceType, Args) of
-                undefined   -> {error, {no_action, Action}};
-                ServiceArgs -> {ServiceType, erl_upnp_helper:make_request(ClientPid, ControlUrl, Action, ServiceType, ServiceArgs)}
+                undefined   ->
+                    {error, {no_action, Action}};
+                ServiceArgs ->
+                    Resp = erl_upnp_helper:make_request(ClientPid, ControlUrl, Action, ServiceType, ServiceArgs),
+                    {ServiceType, Resp}
             end
         end,
         Services
