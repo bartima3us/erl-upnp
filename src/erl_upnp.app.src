@@ -1,5 +1,5 @@
 {application, erl_upnp,
- [{description, "uPnP client implementation."},
+ [{description, "UPnP control point."},
   {vsn, "0.1.0"},
   {registered, []},
   {applications,

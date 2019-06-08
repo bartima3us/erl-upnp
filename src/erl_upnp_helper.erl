@@ -2,7 +2,7 @@
 %%% @author bartimaeus
 %%% @copyright (C) 2019, sarunas.bartusevicius@gmail.com
 %%% @doc
-%%%
+%%% Helper functions module.
 %%% @end
 %%% Created : 04. Jun 2019 22.20
 %%%-------------------------------------------------------------------

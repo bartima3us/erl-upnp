@@ -2,7 +2,7 @@
 %%% @author bartimaeus
 %%% @copyright (C) 2019, sarunas.bartusevicius@gmail.com
 %%% @doc
-%%%
+%%% erl_upnp_helper module unit tests.
 %%% @end
 %%% Created : 08. Jun 2019 17.14
 %%%-------------------------------------------------------------------

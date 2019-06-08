@@ -2,7 +2,7 @@
 %%% @author bartimaeus
 %%% @copyright (C) 2019, sarunas.bartusevicius@gmail.com
 %%% @doc
-%%% Configure TV using Rendering Control service.
+%%% Configure TV using Rendering Control service (experimental).
 %%% @end
 %%% Created : 01. Jun 2019 12.02
 %%%-------------------------------------------------------------------

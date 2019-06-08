@@ -2,7 +2,7 @@
 %%% @author bartimaeus
 %%% @copyright (C) 2019, sarunas.bartusevicius@gmail.com
 %%% @doc
-%%%
+%%% Header file.
 %%% @end
 %%% Created : 08. Jun 2019 01.01
 %%%-------------------------------------------------------------------
