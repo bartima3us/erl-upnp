@@ -27,6 +27,11 @@
     handle_event/4
 ]).
 
+-type action_response() :: [
+    {ServiceType :: list(),
+        SOAPResponse :: list() | {error, {no_action, Action :: list()}}}
+].
+
 -define(COMPATIBLE_SERVICES, [
     "urn:schemas-upnp-org:service:WANIPConnection:1",
     "urn:schemas-upnp-org:service:WANIPConnection:2",
@@ -152,7 +157,7 @@ start_link() ->
     Description     :: list(),
     TTL             :: pos_integer()
 ) ->
-    {ok, Response :: [{ServiceType :: list(), SOAPResponse :: list()}]} |
+    {ok, Response :: action_response()} |
     {error, term()}.
 
 add_port_mapping(Pid, Host, ExternalPort, InternalPort, Protocol, Desc, TTL) ->
@@ -173,7 +178,7 @@ add_port_mapping(Pid, Host, ExternalPort, InternalPort, Protocol, Desc, TTL) ->
     Description     :: list(),
     TTL             :: pos_integer()
 ) ->
-    {ok, Response :: [{ServiceType :: list(), SOAPResponse :: list()}]} |
+    {ok, Response :: action_response()} |
     {error, term()}.
 
 add_any_port_mapping(Pid, Host, ExternalPort, InternalPort, Protocol, Desc, TTL) ->
@@ -190,7 +195,7 @@ add_any_port_mapping(Pid, Host, ExternalPort, InternalPort, Protocol, Desc, TTL)
     ExternalPort    :: inet:port_number(),
     Protocol        :: tcp | udp
 ) ->
-    {ok, Response :: [{ServiceType :: list(), SOAPResponse :: list()}]} |
+    {ok, Response :: action_response()} |
     {error, term()}.
 
 delete_port_mapping(Pid, Host, ExternalPort, Protocol) ->
@@ -207,7 +212,7 @@ delete_port_mapping(Pid, Host, ExternalPort, Protocol) ->
     ExternalPort    :: inet:port_number(),
     Protocol        :: tcp | udp
 ) ->
-    {ok, Response :: [{ServiceType :: list(), SOAPResponse :: list()}]} |
+    {ok, Response :: action_response()} |
     {error, term()}.
 
 get_port_mapping(Pid, Host, ExternalPort, Protocol) ->
