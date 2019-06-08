@@ -1,13 +1,21 @@
 Universal Plug and Play (UPnP) control point
 =====
 
+- [Introduction](#introduction)
+- [SSDP client usage](#ssdp_client_usage)
+- [Subscription](#subscription)
+- [Port forwarding (IGD)](#port_forwarding_igd)
+- [Extending](#extending)
+- [Tests](#tests)
+
+## <a name="introduction">Introduction</a> ##
+
 Universal Plug and Play client (control point) which was originally created as a support library for https://github.com/bartima3us/erl-bittorrent to make file seeding process easily.
 Based on that fact it has only automated port forwarding and subscription. Other actions can be made manually or easily automated as described in "Extending" section.
 
 UPnP architecture and specification documents: https://openconnectivity.org/developer/specifications/upnp-resources/upnp
 
-
-## SSDP client usage
+## <a name="ssdp_client_usage">SSDP client usage</a> ##
 
 Start the client and network discovering in two steps
 ```
@@ -69,11 +77,11 @@ Events which should be handled in the attached handler:
 - ```{raw_entity_discovered, Data}```
 - ```{device_discovered, Data}```
 
-## Subscription
+## <a name="subscription">Subscription</a> ##
 
 TODO
 
-## Port forwarding (IGD)
+## <a name="port_forwarding_igd">Port forwarding (IGD)</a> ##
 
 Start the client
 ```
@@ -123,10 +131,20 @@ Example
 erl_upnp_igd:delete_port_mapping(ClientPid, "", 6020, tcp).
 ```
 
-## Extending
+Stop the client
+```
+erl_upnp_igd:stop(ClientPid)
+```
 
-TODO
+## <a name="extending">Extending</a> ##
 
-## Tests
+This UPnP control point can be easily extended with more services support.<br/>
+Helpers to make request can be found in erl_upnp_helper module.<br/>
+2 examples how to use device discovering and make a request: erl_upnp_igd and erl_upnp_rendering_control (this one just for fun).
 
-TODO
+## <a name="tests">Tests</a> ##
+
+EUnit tests
+```
+$ make tests
+```

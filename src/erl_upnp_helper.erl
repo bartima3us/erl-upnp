@@ -13,6 +13,7 @@
 -export([
     filter_result/2,
     flatten_result/1,
+    form_request/4,
     make_request/5,
     get_internal_ip/0
 ]).
@@ -118,9 +119,9 @@ flatten_concat([Dev = #{device := DevInfo} | Devices], Acc) ->
 
 
 %%  @doc
-%%  Make SOAP request to the control point.
+%%  Create data for the SOAP request.
 %%
-make_request(ClientPid, ControlUrl, Action, ServiceType, Args) ->
+form_request(ClientPid, Action, ServiceType, Args) ->
     Port = erl_upnp_client:get_port(ClientPid),
     ParsedArgs = lists:foldl(
         fun ({Arg, Val}, Acc) ->
@@ -148,6 +149,14 @@ make_request(ClientPid, ControlUrl, Action, ServiceType, Args) ->
         {"Content-Length",      length(Body)}
 %%        {"TRANSFER-ENCODING",   "\"chunked\""} % Not working with some services, for example RenderingControl
     ],
+    #{headers => Headers, body => Body}.
+
+
+%%  @doc
+%%  Make SOAP request to the control point.
+%%
+make_request(ClientPid, ControlUrl, Action, ServiceType, Args) ->
+    #{headers := Headers, body := Body} = form_request(ClientPid, Action, ServiceType, Args),
     case httpc:request(post, {ControlUrl, Headers, "application/xml; charset=\"utf-8\"", Body}, [], []) of
         {ok, {_S, _H, Resp}} -> Resp;
         {error, Error}       -> {error, Error}
