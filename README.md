@@ -7,16 +7,15 @@ Based on that fact it has only automated port forwarding and subscription. Other
 UPnP architecture and specification documents: https://openconnectivity.org/developer/specifications/upnp-resources/upnp
 
 
-SSDP client usage
-=====
+## SSDP client usage
 
-Start client and network discovering in two steps
+Start the client and network discovering in two steps
 ```
 {ok, ClientPid} = erl_upnp_client:start_link().
 erl_upnp_client:start_discover(ClientPid, Delay, Target).
 ```
 
-Start client and network discovering in one step
+Start the client and network discovering in one step
 ```
 {ok, ClientPid} = erl_upnp_client:start_discover_link(Delay, Target).
 ```
@@ -43,7 +42,7 @@ erl_upnp_client:find_entity(ClientPid, Key).
 erl_upnp_client:find_entity(ClientPid, Key).
 ```
 
-- ```Key :: list()``` Key is a device or service type with or without version. Key examples: "InternetGatewayDevice", "Layer3Forwarding:1", "WANDevice:2"
+- ```Key :: list()``` Key is a device or service type with or without version, or a full service type. Key examples: "InternetGatewayDevice", "Layer3Forwarding:1", "WANDevice:2", "urn:schemas-upnp-org:service:Layer3Forwarding:1".
 
 Return all unidentified entities
 ```
@@ -70,14 +69,58 @@ Events which should be handled in the attached handler:
 - ```{raw_entity_discovered, Data}```
 - ```{device_discovered, Data}```
 
-Subscription
------
+## Subscription
 
-Port forwarding (IGD)
------
+## Port forwarding (IGD)
 
-Extending
------
+Start the client
+```
+{ok, ClientPid} = erl_upnp_igd:start_link().
+```
 
-Tests
------
+Add new port mapping (port forwarding)
+```
+erl_upnp_igd:add_port_mapping(ClientPid, Host, ExternalPort, InternalPort, Protocol, Description, TTL).
+```
+
+- ```Host :: inet:ip4_address() | list()``` Domain name or IP from which can be received packets only after port forward. Empty string - wildcard (all IP's).
+- ```ExternalPort :: inet:port_number()``` External port **to** which port should be mapped. 0 means all external ports will be opened (very dangerous!).
+- ```InternalPort :: inet:port_number()``` External port **from** which port should be mapped.
+- ```Protocol :: tcp | udp``` TCP or UDP mapper.
+- ```Description :: list()``` Just plain description what this port forward about.
+- ```TTL :: pos_integer()``` Time to live for port forward in seconds. Valid range: [1, 604800].
+
+Example<br/>
+TCP port forwarding from internal port 6020 to external port 6030 which will be automatically deleted after 60 seconds.
+```
+erl_upnp_igd:add_port_mapping(ClientPid, "", 6020, 6030, tcp, "For BitTorrent.", 60).
+```
+
+Add new any port mapping. This function is almost the same as erl_upnp_igd:add_port_mapping/7 except that if given external port is already in use, it will select one of the free external ports and make a port mapper on it.
+```
+erl_upnp_igd:add_any_port_mapping(ClientPid, Host, ExternalPort, InternalPort, Protocol, Description, TTL).
+```
+
+Return data about particular port mapping
+```
+erl_upnp_igd:get_port_mapping(ClientPid, Host, ExternalPort, Protocol).
+```
+
+Example
+```
+erl_upnp_igd:get_port_mapping(ClientPid, "", 6020, tcp).
+```
+
+Delete particular port mapping
+```
+erl_upnp_igd:delete_port_mapping(ClientPid, Host, ExternalPort, Protocol).
+```
+
+Example
+```
+erl_upnp_igd:delete_port_mapping(ClientPid, "", 6020, tcp).
+```
+
+## Extending
+
+## Tests

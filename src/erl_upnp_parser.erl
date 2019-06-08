@@ -203,8 +203,8 @@ get_content_by_tag(SearchingTag, Description) when is_list(Description) ->
         Description
     ),
     case ResultList of
-        Result -> Result;
-        _      -> undefined
+        []     -> undefined;
+        Result -> Result
     end;
 
 get_content_by_tag(SearchingTag, Description) when is_tuple(Description) ->

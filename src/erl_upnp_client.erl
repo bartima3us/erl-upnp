@@ -12,14 +12,12 @@
 -module(erl_upnp_client).
 -author("bartimaeus").
 -behavior(gen_statem).
+-include("erl_upnp.hrl").
 
 -define(BROADCAST_IP, {239, 255, 255, 250}).
 -define(BROADCAST_PORT, 1900).
 -define(DELAY(S), S * 1000 + 100).
 
--type device()  :: map().
--type service() :: map().
--type entity()  :: device() | service().
 -type target()  :: ssdp_all | upnp_rootdevice | {uuid, list()} | list().
 
 -record(state, {
@@ -134,7 +132,7 @@ start_discover_link(SrcPort, Delay, Target) ->
     ok | {error, term()}.
 
 start_discover(Pid, Delay, Target) ->
-    gen_statem:cast(Pid, {start_discover, Delay, decode_target(Target)}).
+    gen_statem:cast(Pid, {start_discover, Delay, encode_target(Target)}).
 
 
 %%  @doc
@@ -247,7 +245,7 @@ init([SrcPort, NextAction, Delay, Target]) ->
         src_port        = Port,
         parser_pid      = ParserPid,
         delay           = Delay,
-        last_target     = decode_target(Target),
+        last_target     = encode_target(Target),
         event_mgr_pid   = EventMgrPid
     },
     case NextAction of
@@ -447,12 +445,13 @@ discover(Socket, BroadcastIp, BroadcastPort, Target, Delay) ->
 
 
 %%  @private
-%%  Decode search target.
+%%  Encode search target.
 %%
-decode_target(undefined)                    -> undefined;
-decode_target(ssdp_all)                     -> "ssdp:all";
-decode_target(upnp_rootdevice)              -> "upnp:rootdevice";
-decode_target({uuid, Uuid})                 -> "uuid:" ++ Uuid;
-decode_target(Target) when is_list(Target)  -> Target.
+encode_target(undefined)                        -> undefined;
+encode_target(ssdp_all)                         -> "ssdp:all";
+encode_target(upnp_rootdevice)                  -> "upnp:rootdevice";
+encode_target({uuid, Uuid})                     -> "uuid:" ++ Uuid;
+encode_target(Target) when is_list(Target)      -> Target;
+encode_target(Target) when is_binary(Target)    -> binary_to_list(Target).
 
-
+    
