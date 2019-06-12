@@ -17,7 +17,8 @@
     make_request/5,
     get_internal_ip/0,
     get_broadcast_ip/0,
-    get_broadcast_port/0
+    get_broadcast_port/0,
+    get_app_vsn/1
 ]).
 
 %%  @doc
@@ -76,7 +77,7 @@ filter_result(HierarchicalRes, Key) ->
                             Serv
                     end,
                     [],
-                    proplists:get_value("services", DevInfo)
+                    proplists:get_value("services", DevInfo, [])
                 )
         end
     end,
@@ -185,5 +186,18 @@ get_broadcast_ip() ->
 %%
 get_broadcast_port() ->
     1900.
+
+
+%%  @doc
+%%  Get loaded application version.
+%%
+get_app_vsn(App) ->
+    case lists:keyfind(App, 1, application:loaded_applications()) of
+        {_, _, Vsn} ->
+            Vsn;
+        false ->
+            undefined
+    end.
+
 
 

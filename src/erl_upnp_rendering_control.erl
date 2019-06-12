@@ -10,6 +10,8 @@
 -author("bartimaeus").
 -include("erl_upnp.hrl").
 
+-behaviour(gen_statem).
+
 %% API
 -export([
     start_link/0,
@@ -27,8 +29,8 @@
 ]).
 
 -type action_response() :: [
-    {ServiceType :: list(),
-        SOAPResponse :: list() | {error, term()}}
+    {ServiceType :: string(),
+        SOAPResponse :: string() | {error, term()}}
 ].
 
 -define(COMPATIBLE_SERVICES, [

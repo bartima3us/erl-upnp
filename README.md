@@ -3,8 +3,8 @@ Universal Plug and Play (UPnP) control point
 
 - [Introduction](#introduction)
 - [SSDP client usage](#ssdp_client_usage)
-- [Subscription](#subscription)
 - [Port forwarding (IGD)](#port_forwarding_igd)
+- [Subscription](#subscription)
 - [Extending](#extending)
 - [Tests](#tests)
 
@@ -33,8 +33,8 @@ Start the client and network discovering in one step
 
 - ```Target :: ssdp_all``` Return all UPnP compatible devices and services from the network.
 - ```Target :: upnp_rootdevice``` Return all UPnP root devices from the network.
-- ```Target :: {uuid, list()}``` Return device with concrete UUID. UUID example: "429ec14c-8e4a-4074-89cc-01fc84e31e1f"
-- ```Target :: list()``` Some custom search request. Example: "urn:schemas-upnp-org:service:Layer3Forwarding:1"
+- ```Target :: {uuid, string()}``` Return device with concrete UUID. UUID example: "429ec14c-8e4a-4074-89cc-01fc84e31e1f"
+- ```Target :: string()``` Some custom search request. Example: "urn:schemas-upnp-org:service:Layer3Forwarding:1"
 
 Return all entities from the state
 ```
@@ -50,7 +50,7 @@ erl_upnp_client:find_entity(ClientPid, Key).
 erl_upnp_client:find_entity(ClientPid, Key).
 ```
 
-- ```Key :: list()``` Key is a device or service type with or without version, or a full service type. Key examples: "InternetGatewayDevice", "Layer3Forwarding:1", "WANDevice:2", "urn:schemas-upnp-org:service:Layer3Forwarding:1".
+- ```Key :: string()``` Key is a device or service type with or without version, or a full service type. Key examples: "InternetGatewayDevice", "Layer3Forwarding:1", "WANDevice:2", "urn:schemas-upnp-org:service:Layer3Forwarding:1".
 
 Return all unidentified entities
 ```
@@ -77,10 +77,6 @@ Events which should be handled in the attached handler:
 - ```{raw_entity_discovered, Data}```
 - ```{device_discovered, Data}```
 
-## <a name="subscription">Subscription</a> ##
-
-TODO
-
 ## <a name="port_forwarding_igd">Port forwarding (IGD)</a> ##
 
 Start the client
@@ -93,11 +89,11 @@ Add new port mapping (port forwarding)
 erl_upnp_igd:add_port_mapping(ClientPid, Host, ExternalPort, InternalPort, Protocol, Description, TTL).
 ```
 
-- ```Host :: inet:ip4_address() | list()``` Domain name or IP from which can be received packets only after port forward. Empty string - wildcard (all IP's).
+- ```Host :: inet:ip4_address() | string()``` Domain name or IP from which can be received packets only after port forward. Empty string - wildcard (all IP's).
 - ```ExternalPort :: inet:port_number()``` External port **to** which port should be mapped. 0 means all external ports will be opened (very dangerous!).
 - ```InternalPort :: inet:port_number()``` External port **from** which port should be mapped.
 - ```Protocol :: tcp | udp``` TCP or UDP mapper.
-- ```Description :: list()``` Just plain description what this port forward about.
+- ```Description :: string()``` Just plain description what this port forward about.
 - ```TTL :: pos_integer()``` Time to live for port forward in seconds. Valid range: [1, 604800].
 
 Example<br/>
@@ -135,6 +131,10 @@ Stop the client
 ```
 erl_upnp_igd:stop(ClientPid).
 ```
+
+## <a name="subscription">Subscription</a> ##
+
+TODO
 
 ## <a name="extending">Extending</a> ##
 

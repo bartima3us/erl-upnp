@@ -10,6 +10,8 @@
 -author("bartimaeus").
 -include("erl_upnp.hrl").
 
+-behaviour(gen_statem).
+
 %% API
 -export([
     start_link/0,
@@ -17,6 +19,7 @@
     add_any_port_mapping/7,
     delete_port_mapping/4,
     get_port_mapping/4,
+    subscribe/3,
     stop/1
 ]).
 
@@ -28,8 +31,8 @@
 ]).
 
 -type action_response() :: [
-    {ServiceType :: list(),
-        SOAPResponse :: list() | {error, term()}}
+    {ServiceType :: string(),
+        SOAPResponse :: string() | {error, term()}}
 ].
 
 -define(COMPATIBLE_SERVICES, [
@@ -123,8 +126,9 @@
 -define(DELAY(S), S * 1000 + 150).
 
 -record(state, {
-    client_pid          :: pid(),
-    services    = []    :: [service()]
+    client_pid              :: pid(),
+    subscriber_pid          :: pid(),
+    services        = []    :: [service()]
 }).
 
 
@@ -150,11 +154,11 @@ start_link() ->
 %%
 -spec add_port_mapping(
     Pid             :: pid(),
-    Host            :: inet:ip4_address() | list(),
+    Host            :: inet:ip4_address() | string(),
     ExternalPort    :: inet:port_number(),
     InternalPort    :: inet:port_number(),
     Protocol        :: tcp | udp,
-    Description     :: list(),
+    Description     :: string(),
     TTL             :: pos_integer()
 ) ->
     {ok, Response :: action_response()} |
@@ -171,11 +175,11 @@ add_port_mapping(Pid, Host, ExternalPort, InternalPort, Protocol, Desc, TTL) ->
 %%
 -spec add_any_port_mapping(
     Pid             :: pid(),
-    Host            :: inet:ip4_address() | list(),
+    Host            :: inet:ip4_address() | string(),
     ExternalPort    :: inet:port_number(),
     InternalPort    :: inet:port_number(),
     Protocol        :: tcp | udp,
-    Description     :: list(),
+    Description     :: string(),
     TTL             :: pos_integer()
 ) ->
     {ok, Response :: action_response()} |
@@ -191,7 +195,7 @@ add_any_port_mapping(Pid, Host, ExternalPort, InternalPort, Protocol, Desc, TTL)
 %%
 -spec delete_port_mapping(
     Pid             :: pid(),
-    Host            :: inet:ip4_address() | list(),
+    Host            :: inet:ip4_address() | string(),
     ExternalPort    :: inet:port_number(),
     Protocol        :: tcp | udp
 ) ->
@@ -208,7 +212,7 @@ delete_port_mapping(Pid, Host, ExternalPort, Protocol) ->
 %%
 -spec get_port_mapping(
     Pid             :: pid(),
-    Host            :: inet:ip4_address() | list(),
+    Host            :: inet:ip4_address() | string(),
     ExternalPort    :: inet:port_number(),
     Protocol        :: tcp | udp
 ) ->
@@ -218,6 +222,13 @@ delete_port_mapping(Pid, Host, ExternalPort, Protocol) ->
 get_port_mapping(Pid, Host, ExternalPort, Protocol) ->
     E = fun (Arg) -> encode_args(Arg) end,
     gen_statem:call(Pid, {get_port_mapping, E(Host), E(ExternalPort), E(Protocol)}).
+
+
+%%  @doc
+%%  Subscribe state variable changes.
+%%
+subscribe(Pid, Service, StateVars) ->
+    gen_statem:call(Pid, {subscribe, Service, StateVars}).
 
 
 %%  @doc
@@ -276,7 +287,8 @@ handle_event(internal, start, waiting, _SD) ->
 handle_event({call, _From}, Request, waiting, _SD) when
     element (1, Request) =:= add_port_mapping;
     element (1, Request) =:= delete_port_mapping;
-    element (1, Request) =:= get_port_mapping
+    element (1, Request) =:= get_port_mapping;
+    element (1, Request) =:= subscribe
     ->
     {keep_state_and_data, [postpone]};
 
@@ -336,7 +348,26 @@ handle_event({call, From}, Request, open, SD) when
         end,
         Services
     ),
-    {keep_state_and_data, [{reply, From, Result}]}.
+    {keep_state_and_data, [{reply, From, Result}]};
+
+%
+%
+handle_event({call, From}, {subscribe, Service, StateVars}, open, SD) ->
+    #state{
+        client_pid      = ClientPid,
+        subscriber_pid  = SubPid0
+    } = SD,
+    {ok, FoundServices} = erl_upnp_client:find_entity(ClientPid, Service),
+    ServiceStateVars = lists:map(fun (Srv) -> {Srv, StateVars} end, FoundServices),
+    {NewSD, SubPid} = case is_pid(SubPid0) of
+        false ->
+            {ok, SubPid1} = erl_upnp_subscriber:start_link(),
+            {SD#state{subscriber_pid = SubPid1}, SubPid1};
+        true  ->
+            {SD, SubPid0}
+    end,
+    Res = erl_upnp_subscriber:subscribe(SubPid, ServiceStateVars),
+    {keep_state, NewSD, [{reply, From, Res}]}.
 
 
 

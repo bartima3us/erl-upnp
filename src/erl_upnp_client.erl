@@ -16,7 +16,7 @@
 
 -define(DELAY(S), S * 1000 + 100).
 
--type target()  :: ssdp_all | upnp_rootdevice | {uuid, list()} | list().
+-type target()  :: ssdp_all | upnp_rootdevice | {uuid, string()} | string().
 
 -record(state, {
     src_port                        :: inet:port_number(),
@@ -138,7 +138,7 @@ start_discover(Pid, Delay, Target) ->
 %%
 -spec find_entity(
     Pid         :: pid(),
-    Request     :: list()
+    Request     :: string()
 ) ->
     {ok, [entity()] | false} |
     {still_discovering, [entity()] | false} |
@@ -153,7 +153,7 @@ find_entity(Pid, Request) ->
 %%
 -spec get_devices(
     Pid             :: pid(),
-    ReturnFormat    :: list()
+    ReturnFormat    :: string()
 ) ->
     {ok, [device()]} |
     {still_discovering, [device()]} |
@@ -436,9 +436,9 @@ handle_event(info, {udp, _Port, DstIp, DstPort, Message}, _, SD) ->
 discover(Socket, BroadcastIp, BroadcastPort, Target, Delay) ->
     Msg =
         "M-SEARCH * HTTP/1.1\r\n"
-        "HOST:" ++ inet:ntoa(BroadcastIp) ++ ":" ++ integer_to_list(BroadcastPort) ++"\r\n"
+        "HOST:" ++ inet:ntoa(BroadcastIp) ++ ":" ++ integer_to_list(BroadcastPort) ++ "\r\n"
         "ST:" ++ Target ++ "\r\n"                   % Search target
-        "MX:" ++ integer_to_list(Delay) ++"\r\n"    % Delay responses to avoid flood
+        "MX:" ++ integer_to_list(Delay) ++ "\r\n"    % Delay responses to avoid flood
         "MAN:\"ssdp:discover\"\r\n"
         "\r\n",
     gen_udp:send(Socket, BroadcastIp, BroadcastPort, Msg).

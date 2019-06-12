@@ -8,6 +8,9 @@
 %%%-------------------------------------------------------------------
 -module(erl_upnp_parser).
 -author("bartimaeus").
+-include_lib("xmerl/include/xmerl.hrl").
+
+-behaviour(gen_server).
 
 %% API
 -export([
@@ -27,10 +30,9 @@
 
 -ifdef(TEST).
 -export([
-    derive_namespace/1,
-    get_content_by_tag/2,
-    get_device_info/3,
-    fix_address/2
+    get_device_info/2,
+    fix_address/2,
+    filter_elements/2
 ]).
 -endif.
 
@@ -129,13 +131,15 @@ handle_cast({parse_message, From, Message, DstIp, DstPort}, State) ->
             ok = gen_event:notify(EventMgrPid, {raw_entity_discovered, Info}),
             {unidentified, Info};
         Location  ->
-            {ok, {{_V, _C, _RP}, _Headers, Body}} = httpc:request(get, {Location, []}, [], [{body_format, binary}]),
-            {ok, Description, _} = erlsom:simple_form(Body),
-            Namespace = derive_namespace(Description),
-            RootContent = get_content_by_tag(Namespace ++ "root", Description),
-            [DeviceContent] = get_content_by_tag(Namespace ++ "device", RootContent),
-            HierarchicalRes = #{device := Dev} = get_device_info(Namespace, Location, DeviceContent),
-            ExtraData = [{"LOCATION", Location}, {"sender_ip", DstIp}, {"sender_port", DstPort}],
+            {ok, {{_V, _C, _RP}, _Headers, Body}} = httpc:request(get, {Location, []}, [], [{body_format, string}]),
+            {ParsedDescription, _} = xmerl_scan:string(Body),
+            {URLBase, ExtraURLBase} = case xmerl_xpath:string("//root/URLBase/text()", ParsedDescription) of
+                []                        -> {Location, []};
+                [#xmlText{value = Base}]  -> {Base, [{"URLBase", Base}]}
+            end,
+            DeviceContent = xmerl_xpath:string("//root/device", ParsedDescription),
+            HierarchicalRes = #{device := Dev} = get_device_info(URLBase, filter_elements(DeviceContent, device)),
+            ExtraData = ExtraURLBase ++ [{"LOCATION", Location}, {"sender_ip", DstIp}, {"sender_port", DstPort}],
             NewDevice = HierarchicalRes#{device => ExtraData ++ Dev},
             ok = gen_event:notify(EventMgrPid, {device_discovered, NewDevice}),
             {identified, NewDevice}
@@ -191,86 +195,48 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 
 %%  @private
-%%  Get namespace of XML.
-%%
-derive_namespace(Description) ->
-    {RootElement, _RootAttr, _} = Description,
-    re:replace(RootElement, "root", "", [{return, list}]).
-
-
-%%  @private
-%%  Return XML tag content.
-%%
-get_content_by_tag(SearchingTag, Description) when is_list(Description) ->
-    ResultList = lists:filtermap(
-        fun
-            ({Tag, _, Content}) when Tag =:= SearchingTag ->
-                {true, Content};
-            (_) ->
-                false
-        end,
-        Description
-    ),
-    case ResultList of
-        []     -> undefined;
-        Result -> Result
-    end;
-
-get_content_by_tag(SearchingTag, Description) when is_tuple(Description) ->
-    case Description of
-        {SearchingTag, _, Content} -> Content;
-        _                          -> undefined
-    end.
-
-
-%%  @private
 %%  Convert devices XML to maps list in hierarchical format.
 %%
-get_device_info(Namespace, Location, DeviceContent) ->
-    ServiceListTag = Namespace ++ "serviceList",
-    DeviceListTag  = Namespace ++ "deviceList",
+get_device_info(URLBase, [#xmlElement{name = device, content = DeviceContent}]) ->
     #{device := RootDevInfo} = lists:foldl(
         fun
             %
             % Get embedded services info
-            ({Tag, _, Content}, Acc0 = #{device := DevInfo0}) when Tag =:= ServiceListTag ->
+            (#xmlElement{name = serviceList, content = RawContent}, Acc0 = #{device := DevInfo0}) ->
                 ParentUDN = proplists:get_value("UDN", DevInfo0, undefined),
                 ParentDevType = proplists:get_value("deviceType", DevInfo0, undefined),
                 CurrServices = proplists:get_value("services", DevInfo0, []),
                 DevInfo1 = proplists:delete("services", DevInfo0),
                 NewEmbServ = lists:foldl(
                     fun (Serv, Acc1) ->
-                        EmbServContent = get_content_by_tag(Namespace ++ "service", Serv),
                         ExtraData = [{"parentUDN", ParentUDN}, {"parentDeviceType", ParentDevType}],
-                        [get_service_info(Namespace, Location, EmbServContent, ExtraData) | Acc1]
+                        [get_service_info(URLBase, [Serv], ExtraData) | Acc1]
                     end,
                     [],
-                    Content
+                    filter_elements(RawContent, service)
                 ),
                 Acc0#{device => [{"services", CurrServices ++ NewEmbServ} | DevInfo1]};
             %
             % Get embedded devices info
-            ({Tag, _, Content}, Acc0 = #{device := DevInfo0}) when Tag =:= DeviceListTag  ->
+            (#xmlElement{name = deviceList, content = RawContent}, Acc0 = #{device := DevInfo0})  ->
                 CurrEmbDev = proplists:get_value("embedded_devices", DevInfo0, []),
                 DevInfo1 = proplists:delete("embedded_devices", DevInfo0),
                 NewDev = lists:foldl(
                     fun (Dev, Acc1) ->
-                        EmbDevContent = get_content_by_tag(Namespace ++ "device", Dev),
-                        EmbDev = get_device_info(Namespace, Location, EmbDevContent),
+                        EmbDev = get_device_info(URLBase, [Dev]),
                         [EmbDev | Acc1]
                     end,
                     [],
-                    Content
+                    filter_elements(RawContent, device)
                 ),
                 Acc0#{device => [{"embedded_devices", CurrEmbDev ++ NewDev} | DevInfo1]};
             %
             % Get device info
-            ({Tag, _, [Content]}, Acc = #{device := RootDevInfo}) ->
-                Key = re:replace(Tag, Namespace, "", [{return, list}]),
-                UpdatedRootDev = [{Key, Content} | RootDevInfo],
+            (#xmlElement{name = Tag, content = [#xmlText{value = Content}]}, Acc = #{device := RootDevInfo}) ->
+                UpdatedRootDev = [{atom_to_list(Tag), Content} | RootDevInfo],
                 Acc#{device => UpdatedRootDev};
             %
-            % Who knows??
+            % Something not interesting
             (_, Acc) ->
                 Acc
         end,
@@ -283,18 +249,17 @@ get_device_info(Namespace, Location, DeviceContent) ->
 %%  @private
 %%  Convert services XML to maps list.
 %%
-get_service_info(Namespace, Location, ServiceContent, ExtraData) ->
+get_service_info(URLBase, [#xmlElement{name = service, content = ServiceContent}], ExtraData) ->
     #{service := ServiceNewInfo} = lists:foldl(
         fun
-            ({Tag, _, [Content0]}, #{service := AccServiceInfo}) ->
-                Key = re:replace(Tag, Namespace, "", [{return, list}]),
-                Content1 = case Key of
-                    "SCPDURL"     -> fix_address(Content0, Location);
-                    "eventSubURL" -> fix_address(Content0, Location);
-                    "controlURL"  -> fix_address(Content0, Location);
+            (#xmlElement{name = Tag, content = [#xmlText{value = Content0}]}, #{service := AccServiceInfo}) ->
+                Content1 = case atom_to_list(Tag) of
+                    "SCPDURL"     -> fix_address(Content0, URLBase);
+                    "eventSubURL" -> fix_address(Content0, URLBase);
+                    "controlURL"  -> fix_address(Content0, URLBase);
                     _             -> Content0
                 end,
-                #{service => [{Key, Content1} | AccServiceInfo]};
+                #{service => [{atom_to_list(Tag), Content1} | AccServiceInfo]};
             (_, Acc) ->
                 Acc
         end,
@@ -307,10 +272,10 @@ get_service_info(Namespace, Location, ServiceContent, ExtraData) ->
 %%  @private
 %%  Fix address.
 %%
-fix_address(Address, Location) ->
+fix_address(Address, URLBase) ->
     case http_uri:parse(Address) of
         {error, no_scheme} ->
-            {ok, {Scheme0, [], Url, Port, _Tail, []}} = http_uri:parse(Location),
+            {ok, {Scheme0, [], Url, Port, _Tail, []}} = http_uri:parse(URLBase),
             Scheme1 = case Scheme0 of
                 http  -> "http://";
                 https -> "https://"
@@ -324,5 +289,18 @@ fix_address(Address, Location) ->
         {ok, {_, _, _, _, _, _}} ->
             Address
     end.
+
+
+%%  @private
+%%  Leave only elements with some name.
+%%
+filter_elements(RawContent, LeftOnly) ->
+    lists:filter(
+        fun
+            (#xmlElement{name = Tag}) when Tag =:= LeftOnly -> true;
+            (_)                                             -> false
+        end,
+        RawContent
+    ).
 
 
