@@ -51,7 +51,7 @@ init(Req0, State) ->
     case cowboy_req:method(Req0) of
         <<"NOTIFY">> ->
             {ok, ReqBody, Req1} = cowboy_req:read_body(Req0),
-            io:format("xxxxxxx ReqBody=~p", [ReqBody]),
+            io:format("xxxxxxx ReqBody=~p~n~n", [ReqBody]),
             io:format("xxxxxxx Req=~p", [Req1]);
         Other        ->
             io:format("xxxxxxx Unknown method=~p", [Other])

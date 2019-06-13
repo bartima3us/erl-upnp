@@ -12,6 +12,8 @@
 
 -behaviour(gen_server).
 
+-define(TIMEOUT, 5000).
+
 %% API
 -export([
     start_link/0,
@@ -151,11 +153,11 @@ terminate(_Reason, _State) ->
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
+
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
-
 
 %%  @private
 %%  Make state variables subscription.
@@ -164,17 +166,17 @@ make_subscription(ServiceStateVars, Callback) ->
     lists:map(
         fun ({Service = #{service := Data}, StateVars}) ->
             ServiceType = proplists:get_value("serviceType", Data),
-            ReqRes = subscribe_request(Service, StateVars, Callback),
+            ReqRes = subscribe_request(Service, StateVars, Callback, 60),
             {ServiceType, ReqRes}
         end,
         ServiceStateVars
     ).
 
 
+%%  @private
+%%  Make a subscription request.
 %%
-%%
-%%
-subscribe_request(Service, StateVars, Callback) ->
+subscribe_request(Service, StateVars, Callback, Timeout) ->
     OS = case os:type() of
         {unix,  _} -> "Unix";
         {win32, _} -> "Windows"
@@ -186,39 +188,92 @@ subscribe_request(Service, StateVars, Callback) ->
         _Other                      -> "0"
     end,
     AppVsn = erl_upnp_helper:get_app_vsn(erl_upnp),
-    subscribe_request(Service, StateVars, Callback, OS, OSVsn, AppVsn).
+    StateVarsEncoded = string:join(StateVars, ","),
+    TimeoutEncoded = integer_to_list(Timeout),
+    subscribe_request(Service, StateVarsEncoded, Callback, OS, OSVsn, AppVsn, TimeoutEncoded).
 
-subscribe_request(#{service := Service}, _StateVars, Callback, OS, OSVsn, AppVsn) ->
-    %%    join(StringList, Separator)
+subscribe_request(#{service := Service}, StateVarsEncoded, Callback, OS, OSVsn, AppVsn, Timeout) ->
     EventUrl = proplists:get_value("eventSubURL", Service),
-    {ok, {_, _, Host, Port, _, _}} = http_uri:parse(EventUrl),
-    Headers = [
-        {"HOST",        Host ++ ":" ++ integer_to_list(Port)},
-        {"USER-AGENT",  OS ++ "/" ++ OSVsn ++ " UPnP/1.1 Erl-UPnP/" ++ AppVsn},
-        {"CALLBACK",    "<" ++ Callback ++ ">"},
-        {"NT",          "upnp:event"},
-        {"TIMEOUT",     "Second-60"}
-    ],
-%%    Msg =
-%%        "SUBSCRIBE " ++ Path ++ " HTTP/1.1\r\n" ++
-%%        "HOST: " ++ Host ++ ":" ++ integer_to_list(Port) ++ "\r\n" ++
-%%        "USER-AGENT: " ++ OS ++ "/" ++ OSVsn ++ " UPnP/1.1 Erl-UPnP/" ++ AppVsn ++ "\r\n" ++
-%%        "CALLBACK: <" ++ Callback ++ ">\r\n" ++
-%%        "NT: upnp:event\r\n" ++
-%%        "TIMEOUT: Second-120\r\n" ++
-%%        "\r\n",
-%%    {ok, Socket} = gen_udp:open(0, [binary, {active, once}]),
-%%    Result = gen_udp:send(Socket, Host, Port, Msg),
-    io:format("xxxxx EventUrl=~p~n~n", [EventUrl]),
-    Result = case hackney:request(subscribe, EventUrl, Headers, <<"">>) of
-        {ok, Status, RespHeaders, _} ->
-            io:format("xxxxx Status=~p~n~n", [Status]),
-            io:format("xxxxx RespHeaders=~p~n~n", [RespHeaders]),
-            RespHeaders;
-        Other ->
-            Other
+    {ok, {_, _, Host, Port, Path, _}} = http_uri:parse(EventUrl),
+    {StateVarsHeader, HeadersNeeded} = case StateVarsEncoded of
+        []      -> {"", 3};
+        [_|_]   -> {"STATEVAR: " ++ StateVarsEncoded ++ "\r\n", 4} % Device may not implement support of this header
     end,
-    io:format("xxxxx Headers=~p~n~n", [Headers]),
-    Result.
+    Msg =
+        "SUBSCRIBE " ++ Path ++ " HTTP/1.1\r\n" ++
+        "HOST: " ++ Host ++ ":" ++ integer_to_list(Port) ++ "\r\n" ++
+        "USER-AGENT: " ++ OS ++ "/" ++ OSVsn ++ " UPnP/1.1 Erl-UPnP/" ++ AppVsn ++ "\r\n" ++
+        "CALLBACK: <" ++ Callback ++ ">\r\n" ++
+        "NT: upnp:event\r\n" ++
+        "TIMEOUT: Second-" ++ Timeout ++ "\r\n" ++
+        StateVarsHeader ++
+        "\r\n",
+    {ok, ParsedHost} = inet:parse_address(Host),
+    {ok, Socket} = gen_tcp:connect(ParsedHost, Port, [{active, false}, binary], ?TIMEOUT),
+    ok = gen_tcp:send(Socket, Msg),
+    Result = do_recv(Socket, HeadersNeeded),
+    ok = case proplists:get_value("Connection", Result, "keep-alive") of
+        "close"      -> gen_tcp:close(Socket);
+        "keep-alive" -> ok
+    end,
+    proplists:delete("Connection", Result).
+
+
+%%  @private
+%%  Receive from socket loop.
+%%
+do_recv(Socket, HeadersNeeded) ->
+    do_recv(Socket, 0, <<>>, [], HeadersNeeded).
+
+do_recv(Socket, Length, Rest, Result, HeadersNeeded) ->
+    case gen_tcp:recv(Socket, Length, ?TIMEOUT) of
+        {ok, Packet} ->
+            case erlang:decode_packet(http, Packet, []) of
+                {ok, {http_response, _V, 200, "OK"}, ParsedPacket} ->
+                    FullPacket = <<Rest/binary, ParsedPacket/binary>>,
+                    case decode_packet(FullPacket, HeadersNeeded) of
+                        {ok, NewResult}        -> NewResult;
+                        {need_more, NewResult} -> do_recv(Socket, Length, FullPacket, NewResult, HeadersNeeded)
+                    end;
+                {more, Length} ->
+                    do_recv(Socket, Length, Packet, Result, HeadersNeeded);
+                {error, Reason} ->
+                    Reason
+            end;
+        {error, _Reason} ->
+            Result
+    end.
+
+
+%%  @private
+%%  Decoding packets.
+%%
+decode_packet(Packet, HeadersNeeded) ->
+    case re:split(Packet, "\\r\\n", [{return, list}]) of
+        []  ->
+            {need_more, Packet};
+        Lines ->
+            lists:foldl(
+                fun (Line, {_Status, Res}) ->
+                    NewRes = case re:split(Line, ":", [trim, {parts, 2}, {return, list}]) of
+                        [Field, Val] when
+                            Field == "Connection";
+                            Field == "Server";
+                            Field == "SID";
+                            Field == "ACCEPTED-STATEVAR"
+                            ->
+                            [{Field, string:trim(Val)} | Res];
+                        _ ->
+                            Res
+                    end,
+                    case length(NewRes) >= HeadersNeeded of
+                        true  -> {ok, NewRes};
+                        false -> {need_more, NewRes}
+                    end
+                end,
+                {need_more, []},
+                Lines
+            )
+    end.
 
 
