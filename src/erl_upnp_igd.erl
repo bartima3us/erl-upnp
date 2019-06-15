@@ -19,7 +19,6 @@
     add_any_port_mapping/7,
     delete_port_mapping/4,
     get_port_mapping/4,
-    subscribe/3,
     stop/1
 ]).
 
@@ -127,7 +126,6 @@
 
 -record(state, {
     client_pid              :: pid(),
-    subscriber_pid          :: pid(),
     services        = []    :: [service()]
 }).
 
@@ -225,13 +223,6 @@ get_port_mapping(Pid, Host, ExternalPort, Protocol) ->
 
 
 %%  @doc
-%%  Subscribe state variable changes.
-%%
-subscribe(Pid, Service, StateVars) ->
-    gen_statem:call(Pid, {subscribe, Service, StateVars}).
-
-
-%%  @doc
 %%  Stops the client.
 %%
 -spec stop(
@@ -285,10 +276,9 @@ handle_event(internal, start, waiting, _SD) ->
 %
 %
 handle_event({call, _From}, Request, waiting, _SD) when
-    element (1, Request) =:= add_port_mapping;
-    element (1, Request) =:= delete_port_mapping;
-    element (1, Request) =:= get_port_mapping;
-    element (1, Request) =:= subscribe
+    element(1, Request) =:= add_port_mapping;
+    element(1, Request) =:= delete_port_mapping;
+    element(1, Request) =:= get_port_mapping
     ->
     {keep_state_and_data, [postpone]};
 
@@ -315,9 +305,9 @@ handle_event(state_timeout, get_services, waiting, SD = #state{client_pid = Pid}
 %   Open state
 %
 handle_event({call, From}, Request, open, SD) when
-    element (1, Request) =:= add_port_mapping;
-    element (1, Request) =:= delete_port_mapping;
-    element (1, Request) =:= get_port_mapping
+    element(1, Request) =:= add_port_mapping;
+    element(1, Request) =:= delete_port_mapping;
+    element(1, Request) =:= get_port_mapping
     ->
     #state{
         client_pid  = ClientPid,
@@ -348,26 +338,7 @@ handle_event({call, From}, Request, open, SD) when
         end,
         Services
     ),
-    {keep_state_and_data, [{reply, From, Result}]};
-
-%
-%
-handle_event({call, From}, {subscribe, Service, StateVars}, open, SD) ->
-    #state{
-        client_pid      = ClientPid,
-        subscriber_pid  = SubPid0
-    } = SD,
-    {ok, FoundServices} = erl_upnp_client:find_entity(ClientPid, Service),
-    ServiceStateVars = lists:map(fun (Srv) -> {Srv, StateVars} end, FoundServices),
-    {NewSD, SubPid} = case is_pid(SubPid0) of
-        false ->
-            {ok, SubPid1} = erl_upnp_subscriber:start_link(),
-            {SD#state{subscriber_pid = SubPid1}, SubPid1};
-        true  ->
-            {SD, SubPid0}
-    end,
-    Res = erl_upnp_subscriber:subscribe(SubPid, ServiceStateVars),
-    {keep_state, NewSD, [{reply, From, Res}]}.
+    {keep_state_and_data, [{reply, From, Result}]}.
 
 
 

@@ -2,38 +2,47 @@
 %%% @author bartimaeus
 %%% @copyright (C) 2019, sarunas.bartusevicius@gmail.com
 %%% @doc
-%%%
+%%% UPnP subscription implementation.
 %%% @end
-%%% Created : 09. Jun 2019 20.57
+%%% Created : 12. Jun 2019 00.57
 %%%-------------------------------------------------------------------
 -module(erl_upnp_subscriber).
 -author("bartimaeus").
 -include("erl_upnp.hrl").
 
--behaviour(gen_server).
-
--define(TIMEOUT, 5000).
+-behaviour(gen_statem).
 
 %% API
 -export([
     start_link/0,
-    subscribe/2
+    subscribe/4,
+    unsubscribe/2,
+    get_event_mgr_pid/1,
+    get_callback/1,
+    get_subscriptions/1,
+    stop/1
 ]).
 
-%% gen_server callbacks
+%% gen_statem callbacks
 -export([
     init/1,
-    handle_call/3,
-    handle_cast/2,
-    handle_info/2,
-    terminate/2,
-    code_change/3
+    callback_mode/0,
+    handle_event/4
 ]).
 
+-define(DELAY(S), S * 1000 + 150).
+-define(TIMEOUT, 5000).
+-define(MAX_TTL, 4233600). % seconds (49 days)
+-define(INFINITE_TTL, 1800). % seconds (30 min)
+-define(REFRESH_INFINITE, 1799500). % milliseconds (29 min 59.5 s)
+
+
 -record(state, {
-    service_state_vars  = []    :: [{service(), string()}],
-    http_pid                    :: pid(),
-    callback                    :: pid()
+    client_pid                      :: pid(),
+    http_pid                        :: pid(),
+    event_mgr_pid                   :: pid(),
+    callback                        :: string(),
+    subscriptions           = []    :: [] % @todo
 }).
 
 
@@ -42,24 +51,93 @@
 %%% API
 %%%===================================================================
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Starts the server
+%%  @doc
+%%  Starts the server.
 %%
-%% @end
-%%--------------------------------------------------------------------
 -spec start_link() ->
-    {ok, Pid :: pid()} | ignore | {error, Reason :: term()}.
+    {ok, Pid :: pid()} |
+    ignore |
+    {error, Error :: term()}.
 
 start_link() ->
-    gen_server:start_link(?MODULE, [], []).
+    gen_statem:start_link(?MODULE, [], []).
 
 
+%%  @doc
+%%  Subscribe state variable changes.
 %%
+-spec subscribe(
+    Pid         :: pid(),
+    Service     :: string(),
+    StateVars   :: [string()],
+    TTL         :: pos_integer() | infinite
+) ->
+    ok. % @todo
+
+subscribe(Pid, Service, StateVars, TTL) ->
+    gen_statem:call(Pid, {subscribe, Service, StateVars, TTL}).
+
+
+%%  @doc
+%%  Unsubscribe state variable changes.
 %%
+-spec unsubscribe(
+    Pid         :: pid(),
+    Service     :: string()
+) ->
+    ok |
+    {error, no_subscription}.
+
+unsubscribe(Pid, Service) ->
+    gen_statem:call(Pid, {unsubscribe, Service}).
+
+
+%%  @doc
+%%  Returns UDP port of the control point.
 %%
-subscribe(Pid, ServiceStateVars) ->
-    gen_server:call(Pid, {subscribe, ServiceStateVars}).
+-spec get_callback(
+    Pid :: pid()
+) ->
+    string().
+
+get_callback(Pid) ->
+    gen_statem:call(Pid, get_callback).
+
+
+%%  @doc
+%%  Returns event manager pid.
+%%
+-spec get_event_mgr_pid(
+    Pid :: pid()
+) ->
+    pid().
+
+get_event_mgr_pid(Pid) ->
+    gen_statem:call(Pid, get_event_mgr_pid).
+
+
+%%  @doc
+%%  Returns all subscriptions.
+%%
+-spec get_subscriptions(
+    Pid :: pid()
+) ->
+    pid().
+
+get_subscriptions(Pid) ->
+    gen_statem:call(Pid, get_subscriptions).
+
+
+%%  @doc
+%%  Stops the client.
+%%
+-spec stop(
+    Pid :: pid()
+) ->
+    ok.
+
+stop(Pid) ->
+    gen_statem:stop(Pid).
 
 
 
@@ -67,92 +145,118 @@ subscribe(Pid, ServiceStateVars) ->
 %%% gen_server callbacks
 %%%===================================================================
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Initializes the server
 %%
-%% @spec init(Args) -> {ok, State} |
-%%                     {ok, State, Timeout} |
-%%                     ignore |
-%%                     {stop, Reason}
-%% @end
-%%--------------------------------------------------------------------
+%%
+%%
 init([]) ->
-    {ok, HttpPid} = erl_upnp_subscriber_handler:start_http(),
-    Port = ranch:get_port(upnp_callback),
+    TTL = 2,
+    HttpId = {upnp_callback, self()},
+    {ok, ClientPid} = erl_upnp_client:start_discover_link(TTL, ssdp_all),
+    {ok, EventMgrPid} = gen_event:start_link(),
+    {ok, HttpPid} = erl_upnp_subscriber_handler:start_http(EventMgrPid, HttpId),
+    true = link(HttpPid),
+    Port = ranch:get_port(HttpId),
     IP = erl_upnp_helper:get_internal_ip(),
     Callback = "http://" ++ inet:ntoa(IP) ++ ":" ++ integer_to_list(Port) ++ "/callback",
-    {ok, #state{http_pid = HttpPid, callback = Callback}}.
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Handling call messages
-%%
-%% @end
-%%--------------------------------------------------------------------
-handle_call({subscribe, ServiceStateVars}, _From, State) ->
-    #state{
-        callback            = Callback,
-        service_state_vars  = CurrServiceStateVars
-    } = State,
-    SubRes = make_subscription(ServiceStateVars, Callback),
-    NewState = State#state{
-        service_state_vars  = CurrServiceStateVars ++ ServiceStateVars
+    State = #state{
+        http_pid        = HttpPid,
+        client_pid      = ClientPid,
+        event_mgr_pid   = EventMgrPid,
+        callback        = Callback
     },
-    {reply, SubRes, NewState}.
+    {ok, waiting, State, [{next_event, internal, start}]}.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Handling cast messages
+
 %%
-%% @end
-%%--------------------------------------------------------------------
-handle_cast(_Request, State) ->
-    {noreply, State}.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Handling all non call/cast messages
 %%
-%% @spec handle_info(Info, State) -> {noreply, State} |
-%%                                   {noreply, State, Timeout} |
-%%                                   {stop, Reason, State}
-%% @end
-%%--------------------------------------------------------------------
-handle_info(Info, State) ->
-    io:format("xxxxx Info=~p~n~n", [Info]),
-    {noreply, State}.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% This function is called by a gen_server when it is about to
-%% terminate. It should be the opposite of Module:init/1 and do any
-%% necessary cleaning up. When it returns, the gen_server terminates
-%% with Reason. The return value is ignored.
 %%
-%% @spec terminate(Reason, State) -> void()
-%% @end
-%%--------------------------------------------------------------------
-terminate(_Reason, _State) ->
-    ok.
+callback_mode() ->
+    [handle_event_function].
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Convert process state when code is changed
-%%
-%% @spec code_change(OldVsn, State, Extra) -> {ok, NewState}
-%% @end
-%%--------------------------------------------------------------------
-code_change(_OldVsn, State, _Extra) ->
-    {ok, State}.
 
+
+%%%===================================================================
+%%% States
+%%%===================================================================
+
+%--------------------------------------------------------------------
+%   Waiting state
+%
+handle_event(internal, start, waiting, _SD) ->
+    keep_state_and_data;
+
+%
+%
+handle_event({call, _From}, {subscribe, Service, _StateVars, _TTL}, waiting, SD = #state{client_pid = Pid}) ->
+    case get_client_state(Pid, Service) of
+        still_discovering -> {keep_state_and_data, [postpone, {state_timeout, 1000, {get_services, Service}}]};
+        ok                -> {next_state, open, SD, [postpone]}
+    end;
+
+%
+%
+handle_event({call, From}, {unsubscribe, _Service}, waiting, _SD) ->
+    {keep_state_and_data, [{reply, From, {error, no_subscription}}]};
+
+%
+%
+handle_event(state_timeout, {get_services, Service}, waiting, SD = #state{client_pid = Pid}) ->
+    case get_client_state(Pid, Service) of
+        still_discovering -> {keep_state_and_data, [{state_timeout, 1000, {get_services, Service}}]};
+        ok                -> {next_state, open, SD}
+    end;
+
+%--------------------------------------------------------------------
+%   Open state
+%
+handle_event(Request, Msg = {subscribe, Service, StateVars, TTL}, open, SD) when
+    element(1, Request) =:= call;
+    element(1, Request) =:= timeout
+    ->
+    #state{
+        client_pid      = ClientPid,
+        callback        = Callback,
+        subscriptions   = CurrSubs
+    } = SD,
+    Timeout = encode_args(ttl, TTL),
+    {ok, FoundServices} = erl_upnp_client:find_entity(ClientPid, Service),
+    ServiceStateVars = lists:map(fun (Srv) -> {Srv, StateVars} end, FoundServices),
+    Res = make_subscription(ServiceStateVars, Callback, Timeout),
+    TimeoutActions = get_timeout_actions(TTL, Msg, Res),
+    {NewSubs, ReplyAction} = case Request of
+        {call, From} ->
+            {CurrSubs ++ Res, [{reply, From, Res}]};
+        {timeout, {refresh_subscription, SID}} ->
+            {remove_subscription(CurrSubs, SID) ++ Res, []}
+    end,
+    {keep_state, SD#state{subscriptions = NewSubs}, ReplyAction ++ TimeoutActions};
+
+%
+%
+handle_event({call, From}, {unsubscribe, _Service}, open, SD = #state{subscriptions = Subs}) ->
+    Res = ok,
+    {keep_state, SD#state{subscriptions = Subs}, [{reply, From, Res}]};
+
+%
+%
+handle_event({timeout, remove_subscription}, SID, open, SD = #state{subscriptions = Subs}) ->
+    {keep_state, SD#state{subscriptions = remove_subscription(Subs, SID)}};
+
+%--------------------------------------------------------------------
+%   All state events
+%
+handle_event({call, From}, get_callback, _, #state{callback = Callback}) ->
+    {keep_state_and_data, [{reply, From, Callback}]};
+
+%
+%
+handle_event({call, From}, get_event_mgr_pid, _, #state{event_mgr_pid = Pid}) ->
+    {keep_state_and_data, [{reply, From, Pid}]};
+
+%
+%
+handle_event({call, From}, get_subscriptions, _, #state{subscriptions = Subscriptions}) ->
+    {keep_state_and_data, [{reply, From, Subscriptions}]}.
 
 
 %%%===================================================================
@@ -160,13 +264,70 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 
 %%  @private
+%%  Encode arguments.
+%%
+encode_args(ttl, infinite) -> ?INFINITE_TTL;
+encode_args(ttl, Secs) when Secs =< ?MAX_TTL -> Secs.
+
+
+%%  @private
+%%  Remove subscription from state by SID.
+%%
+remove_subscription(Subs, SID) ->
+    lists:filter(
+        fun ({_Srv, Data}) ->
+            case proplists:get_value("SID", Data) of
+                SID     -> false;
+                _Other  -> true
+            end
+        end,
+        Subs
+    ).
+
+%%  @private
+%%  Create a timers.
+%%
+get_timeout_actions(TTL, {subscribe, Service, StateVars, TTL}, Res) ->
+    case TTL of
+        infinite ->
+            lists:foldl(
+                fun ({_Srv, Data}, Acc) ->
+                    SID = proplists:get_value("SID", Data),
+                    [{{timeout, {refresh_subscription, SID}}, ?REFRESH_INFINITE, {subscribe, Service, StateVars, TTL}} | Acc]
+                end,
+                [],
+                Res
+            );
+        TTL      ->
+            lists:foldl(
+                fun ({_Srv, Data}, Acc) ->
+                    SID = proplists:get_value("SID", Data),
+                    [{{timeout, remove_subscription}, TTL * 1000, SID} | Acc]
+                end,
+                [],
+                Res
+            )
+    end.
+
+
+%%  @private
+%%  Get SSDP client state.
+%%
+get_client_state(Pid, Service) ->
+    case erl_upnp_client:find_entity(Pid, Service) of
+        {still_discovering, _} -> still_discovering;
+        {ok, _}                -> ok
+    end.
+
+
+%%  @private
 %%  Make state variables subscription.
 %%
-make_subscription(ServiceStateVars, Callback) ->
+make_subscription(ServiceStateVars, Callback, TTL) ->
     lists:map(
         fun ({Service = #{service := Data}, StateVars}) ->
             ServiceType = proplists:get_value("serviceType", Data),
-            ReqRes = subscribe_request(Service, StateVars, Callback, 60),
+            ReqRes = subscribe_request(Service, StateVars, Callback, TTL),
             {ServiceType, ReqRes}
         end,
         ServiceStateVars
@@ -216,7 +377,7 @@ subscribe_request(#{service := Service}, StateVarsEncoded, Callback, OS, OSVsn, 
         "close"      -> gen_tcp:close(Socket);
         "keep-alive" -> ok
     end,
-    proplists:delete("Connection", Result).
+    [{"host", {ParsedHost, Port}} | proplists:delete("Connection", Result)].
 
 
 %%  @private
@@ -229,7 +390,7 @@ do_recv(Socket, Length, Rest, Result, HeadersNeeded) ->
     case gen_tcp:recv(Socket, Length, ?TIMEOUT) of
         {ok, Packet} ->
             case erlang:decode_packet(http, Packet, []) of
-                {ok, {http_response, _V, 200, "OK"}, ParsedPacket} ->
+                {ok, {http_response, _Vsn, 200, "OK"}, ParsedPacket} ->
                     FullPacket = <<Rest/binary, ParsedPacket/binary>>,
                     case decode_packet(FullPacket, HeadersNeeded) of
                         {ok, NewResult}        -> NewResult;
