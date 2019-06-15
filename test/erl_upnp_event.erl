@@ -54,6 +54,12 @@ init(_) ->
 handle_event({state_var, _Var, _Val, _Extra}, _State) ->
     {ok, []};
 
+handle_event({subscription_timeout, _SID}, _State) ->
+    {ok, []};
+
+handle_event({subscription_refresh, _OldSID, _NewSID}, _State) ->
+    {ok, []};
+
 handle_event(_Event, State) ->
     {ok, State}.
 
