@@ -97,12 +97,12 @@ test_subscribe(_Config) ->
     ok = gen_event:add_handler(EventMgrPid, erl_upnp_event_handler, []),
     Result = erl_upnp_subscriber:subscribe(ClientPid, "RenderingControl:1", [], 60),
     ok = erl_upnp_helper:notify_request(CallbackUrl, SID, NotifyBody),
-    ok = meck:wait(erl_upnp_event_handler, handle_event, ['_', '_'], 5000),
     Arg = {state_var,
         'LastChange',
         "<Event xmlns=\"urn:schemas-upnp-org:metadata-1-0/RCS/\"><InstanceID val=\"0\"><Mute channel=\"Master\" val=\"0\"/><PresetNameList val=\"FactoryDefaults\"/><Volume channel=\"Master\" val=\"2\"/><X_360View latitudeCenter=\"0.0000\" longitudeCenter=\"0.0000\" scaleFactor=\"2.4000\" val=\"\"/><X_AspectRatio val=\"Default\"/><X_Captions val=\"\"/><X_EnabledCaptions val=\"\"/><X_ServiceCapabilities val=\"GetVolume,SetVolume,GetMute,SetMute\"/></InstanceID></Event>",
         '_'
     },
+    ok = meck:wait(erl_upnp_event_handler, handle_event, [Arg, '_'], 5000),
     1 = meck:num_calls(erl_upnp_event_handler, handle_event, [Arg, '_']),
     ok = erl_upnp_subscriber:stop(ClientPid),
     true = meck:validate(erl_upnp_helper),
