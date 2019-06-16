@@ -56,9 +56,9 @@ Return all entities from the state
 ```
 erl_upnp_client:get_devices(ClientPid, ReturnFormat).
 ```
-
-- ```ReturnFormat :: hierarchical``` Return all devices and entities in their original places from hierarchical point of view.
-- ```ReturnFormat :: flat``` Return all embedded devices in one list.
+- ```ReturnFormat``` :
+    - ```ReturnFormat :: hierarchical``` Return all devices and entities in their original places from hierarchical point of view.
+    - ```ReturnFormat :: flat``` Return all embedded devices in one list.
 
 Find entities in the state by the key
 ```
