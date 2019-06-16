@@ -4,7 +4,7 @@ Universal Plug and Play (UPnP) control point
 - [Introduction](#introduction)
 - [SSDP client usage](#ssdp_client_usage)
 - [Port forwarding (IGD)](#port_forwarding_igd)
-- [Subscription](#subscription)
+- [State variables subscription](#subscription)
 - [Extending](#extending)
 - [Tests](#tests)
 
