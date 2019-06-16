@@ -30,6 +30,14 @@
     handle_event/4
 ]).
 
+-ifdef(TEST).
+-export([
+    decode_packet/3,
+    get_timeout_actions/2,
+    remove_subscription/2
+]).
+-endif.
+
 -type sub_param() ::
     {Param :: string(), Value :: term()}.
 
@@ -438,11 +446,11 @@ subscribe_request(#{service := Service}, StateVarsEncoded, Callback, OS, OSVsn, 
     {ok, Socket} = gen_tcp:connect(ParsedHost, Port, [{active, false}, binary], ?TIMEOUT),
     ok = gen_tcp:send(Socket, Msg),
     Result = do_recv(Socket, HeadersNeeded, fun decode_packet/3),
-    ok = case proplists:get_value("Connection", Result, "keep-alive") of
+    ok = case proplists:get_value("connection", Result, "keep-alive") of
         "close"      -> gen_tcp:close(Socket);
         "keep-alive" -> ok
     end,
-    [{"host", {ParsedHost, Port}} | proplists:delete("Connection", Result)].
+    [{"host", {ParsedHost, Port}} | proplists:delete("connection", Result)].
 
 
 %%  @private
@@ -461,7 +469,7 @@ subscribe_refresh_request(#{service := Service}, SID, Timeout) ->
     {ok, Socket} = gen_tcp:connect(ParsedHost, Port, [{active, false}, binary], ?TIMEOUT),
     ok = gen_tcp:send(Socket, Msg),
     Result = do_recv(Socket, 0, fun (_, _, CurrRes) -> {ok, CurrRes} end),
-    ok = case proplists:get_value("Connection", Result, "keep-alive") of
+    ok = case proplists:get_value("connection", Result, "keep-alive") of
         "close"      -> gen_tcp:close(Socket);
         "keep-alive" -> ok
     end.
@@ -482,7 +490,7 @@ unsubscribe_request(#{service := Service}, SID) ->
     {ok, Socket} = gen_tcp:connect(ParsedHost, Port, [{active, false}, binary], ?TIMEOUT),
     ok = gen_tcp:send(Socket, Msg),
     Result = do_recv(Socket, 0, fun (_, _, CurrRes) -> {ok, CurrRes} end),
-    ok = case proplists:get_value("Connection", Result, "keep-alive") of
+    ok = case proplists:get_value("connection", Result, "keep-alive") of
         "close"      -> gen_tcp:close(Socket);
         "keep-alive" -> ok
     end.
@@ -530,10 +538,13 @@ decode_packet(Packet, HeadersNeeded, _CurrResult) ->
                     NewRes = case re:split(Line, ":", [trim, {parts, 2}, {return, list}]) of
                         [Field, Val] when
                             Field == "Connection";
+                            Field == "CONNECTION";
                             Field == "Server";
-                            Field == "SID";
+                            Field == "SERVER";
                             Field == "ACCEPTED-STATEVAR"
                             ->
+                            [{string:lowercase(Field), string:trim(Val)} | Res];
+                        [Field, Val] when Field == "SID" ->
                             [{Field, string:trim(Val)} | Res];
                         _ ->
                             Res

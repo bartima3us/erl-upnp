@@ -75,6 +75,7 @@ test_subscribe(_Config) ->
                 {"uuid:378e77bc-a198-4796-8439-720c070f7a98",
                     [{"TTL", 60},
                     {"host", {{127, 0, 0, 1}, ?EVENT_PORT}},
+                    {"server", "UPnP/1.1 Samsung AllShare Server/1.0"},
                     {"SID", SID}]}
     }],
     ok = meck:new([erl_upnp_helper, erl_upnp_event_handler], [passthrough]),
