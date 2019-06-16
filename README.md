@@ -39,12 +39,12 @@ Start the client and network discovering in one step
 
 
 - ```Opts :: [option()]```:
-    - ```{delay, Time :: pos_integer()}``` - The same as Delay in erl_upnp_client:start_discover/3 function. Default: 2.
-    - ```{poll, Time :: pos_integer()}``` - Time in **milliseconds**. Will poll network every `Time` milliseconds to search a new devices. Default: false (that means poll will occur only one time).
+    - ```{delay, TimeS :: pos_integer()}``` - The same as Delay in erl_upnp_client:start_discover/3 function. Default: 2.
+    - ```{poll, TimeMS :: pos_integer()}``` - Time in **milliseconds**. Will poll network every `TimeMS` milliseconds to search a new devices. Default: false (that means poll will occur only one time).
 
 Constant network polling can also be enabled by direct call
 ```
-erl_upnp_client:start_poll(ClientPid, Time :: pos_integer()).
+erl_upnp_client:start_poll(ClientPid, TimeMS :: pos_integer()).
 ```
 
 ...and disabled
