@@ -148,15 +148,64 @@ Stop the client
 erl_upnp_igd:stop(ClientPid).
 ```
 
-## <a name="subscription">Subscription</a> ##
+## <a name="subscription">State variables subscription</a> ##
 
-TODO
+State variable changes can be subscribed and received as Erlang events.
+
+Start the subscriber
+```
+{ok, ClientPid} = erl_upnp_subscriber:start_link().
+```
+
+Get event manager pid and attach event handler
+```
+EventMgrPid = erl_upnp_subscriber:get_event_mgr_pid(ClientPid).
+gen_event:add_handler(EventMgrPid, your_upnp_event_handler, []).
+```
+
+Events which should be handled in the attached handler:
+- ```{state_var, Var, Val, Extra}``` - Will be sent when subscribed state variable is changed. `Extra` - is an extra data about sender in proplist (keys: "host", "SID"). **Warning!** First send will occur just after new subscription with current values of state variables.
+- ```{subscription_timeout, SID}``` - Will be sent when subscription time to live is over.
+
+Start subscription
+```
+erl_upnp_subscriber:subscribe(ClientPid, ServiceType, StateVariables, TTL).
+```
+
+- ```ServiceType :: string()``` Service you want to subscribe. Example: "RenderingControl:1".
+- ```StateVariables :: [string()]``` List of state variable you want to subscribe. Empty list mean that all variables of that service will be subscribed. Example: ["LastChange"]. **Warning!** Not all devices supports state variables list. In that case this list will be ignored and all variables will be subscribed.
+- ```TTL :: pos_integer() | infinite``` Time to live for subscription in **seconds** or `infinite` atom. **Warning!** Since UPnP v2.0 "real" infinite subscription is not possible anymore so in case of this client, `infinite` subscription in reality is 30 minutes subscription which is constantly updated every time before end.
+
+Example
+```
+erl_upnp_subscriber:subscribe(ClientPid, "RenderingControl:1", [], 1800).
+```
+
+Get current subscriptions
+```
+erl_upnp_subscriber:get_subscriptions(ClientPid).
+```
+
+Get subscriber callback link
+```
+erl_upnp_subscriber:get_callback(ClientPid).
+```
+
+Stop subscription of some service
+```
+erl_upnp_subscriber:unsubscribe(ClientPid, ServiceType).
+```
+
+Stop the subscriber
+```
+erl_upnp_subscriber:stop(ClientPid).
+```
 
 ## <a name="extending">Extending</a> ##
 
 This UPnP control point can be easily extended with more services support.<br/>
 Helpers to make request can be found in erl_upnp_helper module.<br/>
-2 examples how to use device discovering and make a request: erl_upnp_igd and erl_upnp_rendering_control (this one just for fun).
+3 examples how to use device discovering and make a request: erl_upnp_igd, erl_upnp_subscriber and erl_upnp_rendering_control (this one just for fun).
 
 ## <a name="tests">Tests</a> ##
 
