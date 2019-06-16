@@ -40,8 +40,8 @@
 -define(DELAY(S), S * 1000 + 150).
 -define(TIMEOUT, 5000).
 -define(MAX_TTL, 4233600). % seconds (49 days)
--define(INFINITE_TTL, 20). % seconds (30 min) % 1800
--define(REFRESH_AFTER, 19500). % milliseconds (29 min) % 1740000
+-define(INFINITE_TTL, 1800). % seconds (30 min)
+-define(REFRESH_AFTER, 1740000). % milliseconds (29 min)
 
 -record(state, {
     client_pid                      :: pid(),

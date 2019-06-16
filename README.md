@@ -164,7 +164,7 @@ gen_event:add_handler(EventMgrPid, your_upnp_event_handler, []).
 ```
 
 Events which should be handled in the attached handler:
-- ```{state_var, Var, Val, Extra}``` - Will be sent when subscribed state variable is changed. `Extra` - is an extra data about sender in proplist (keys: "host", "SID"). **Warning!** First send will occur just after new subscription with current values of state variables.
+- ```{state_var, Var, Val, Extra}``` - Will be sent when subscribed state variable is changed. `Extra` - is an extra data in proplist (keys: "SEQ", host", "SID"). **Warning!** First send will occur just after new subscription with current values of state variables and that event SEQ will be 0. Every other event SEQ will be increased by 1.
 - ```{subscription_timeout, SID}``` - Will be sent when subscription time to live is over.
 
 Start subscription

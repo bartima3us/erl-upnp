@@ -2,11 +2,11 @@
 %%% @author bartimaeus
 %%% @copyright (C) 2019, sarunas.bartusevicius@gmail.com
 %%% @doc
-%%%
+%%% UPnP subscriber test event handler.
 %%% @end
 %%% Created : 15. Jun 2019 14.05
 %%%-------------------------------------------------------------------
--module(erl_upnp_event).
+-module(erl_upnp_event_handler).
 -author("bartimaeus").
 
 -behaviour(gen_event).

@@ -56,13 +56,14 @@ init(Req0, State = #state{event_mgr_pid = EventMgrPid}) ->
         <<"NOTIFY">> ->
             {ok, ReqBody, Req1} = cowboy_req:read_body(Req0),
             SID = cowboy_req:header(<<"sid">>, Req1),
+            SEQ = cowboy_req:header(<<"seq">>, Req1),
             Peer = cowboy_req:peer(Req1),
             {ParsedResp, _} = xmerl_scan:string(binary_to_list(ReqBody)),
             PropertySet = xmerl_xpath:string("//e:propertyset/e:property", ParsedResp),
             lists:foreach(
                 fun
                     (#xmlElement{name = 'e:property', content = [#xmlElement{name = Var, content = [#xmlText{value = Val}]}]}) ->
-                        Event = {state_var, Var, Val, [{"host", Peer}, {"SID", SID}]},
+                        Event = {state_var, Var, Val, [{"SEQ", binary_to_integer(SEQ)}, {"host", Peer}, {"SID", SID}]},
                         gen_event:notify(EventMgrPid, Event);
                     (_) ->
                         ok

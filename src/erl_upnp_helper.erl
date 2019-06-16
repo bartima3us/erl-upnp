@@ -18,7 +18,8 @@
     get_internal_ip/0,
     get_broadcast_ip/0,
     get_broadcast_port/0,
-    get_app_vsn/1
+    get_app_vsn/1,
+    notify_request/3
 ]).
 
 %%  @doc
@@ -199,5 +200,24 @@ get_app_vsn(App) ->
             undefined
     end.
 
+
+%%  @doc
+%%  Notify request. Currently only for testing purposes.
+%%
+notify_request(CallbackUrl, SID, Content) ->
+    {ok, {_, _, Host, Port, Path, _}} = http_uri:parse(CallbackUrl),
+    Msg =
+        "NOTIFY " ++ Path ++ " HTTP/1.0\r\n" ++
+        "HOST: " ++ Host ++ ":" ++ integer_to_list(Port) ++ "\r\n" ++
+        "CONTENT-TYPE: text/xml; charset=\"utf-8\"\r\n" ++
+        "NT: upnp:event\r\n" ++
+        "NTS: upnp:propchange\r\n" ++
+        "SID: " ++ SID ++ "\r\n" ++
+        "SEQ: 0\r\n" ++
+        "CONTENT-LENGTH: " ++ integer_to_list(length(Content)) ++ "\r\n" ++
+        "\r\n" ++ Content,
+    {ok, ParsedHost} = inet:parse_address(Host),
+    {ok, Socket} = gen_tcp:connect(ParsedHost, Port, [{active, false}, binary], 5000),
+    ok = gen_tcp:send(Socket, Msg).
 
 
