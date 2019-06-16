@@ -44,7 +44,7 @@ Start the client and network discovering in one step
 
 Constant network polling can also be enabled by direct call
 ```
-erl_upnp_client:start_poll(ClientPid, TimeMS :: pos_integer()).
+erl_upnp_client:start_poll(ClientPid, TimeMS).
 ```
 
 ...and disabled
@@ -73,7 +73,7 @@ Return all unidentified entities
 erl_upnp_client:get_unidentified_devices(ClientPid).
 ```
 
-Return a port which control point (client) is using as a source port
+Return a port which is using as a source port by the control point (client)
 ```
 erl_upnp_client:get_port(ClientPid)
 ```
@@ -83,7 +83,7 @@ Stop the client
 erl_upnp_client:stop(ClientPid)
 ```
 
-Attach event handler to client event manager and get data about new entities as soon as they are discovered.
+Attach event handler to client event manager and get data about new entities as soon as they are discovered
 ```
 EventMgrPid = erl_upnp_client:get_event_mgr_pid(ClientPid)
 add_sup_handler(EventMgrPid, your_handler_mod, []).
@@ -164,7 +164,7 @@ gen_event:add_handler(EventMgrPid, your_upnp_event_handler, []).
 ```
 
 Events which should be handled in the attached handler:
-- ```{state_var, Var, Val, Extra}``` - Will be sent when subscribed state variable is changed. `Extra` - is an extra data in proplist (keys: "SEQ", host", "SID"). **Warning!** First send will occur just after new subscription with current values of state variables and that event SEQ will be 0. Every other event SEQ will be increased by 1.
+- ```{state_var, Var, Val, Extra}``` - Will be sent when subscribed state variable is changed. `Extra` - is an extra data in proplist (keys: "SEQ", host", "SID"). **Warning!** First send will occur just after new subscription with current values of state variables, and that event SEQ will be 0. Every other event SEQ will be increased by 1.
 - ```{subscription_timeout, SID}``` - Will be sent when subscription time to live is over.
 
 Start subscription
@@ -205,7 +205,7 @@ erl_upnp_subscriber:stop(ClientPid).
 
 This UPnP control point can be easily extended with more services support.<br/>
 Helpers to make request can be found in erl_upnp_helper module.<br/>
-3 examples how to use device discovering and make a request: erl_upnp_igd, erl_upnp_subscriber and erl_upnp_rendering_control (this one just for fun).
+3 examples how to use device discovering and make a request: `erl_upnp_igd`, `erl_upnp_subscriber` and `erl_upnp_rendering_control` (this one just for fun).
 
 ## <a name="tests">Tests</a> ##
 
