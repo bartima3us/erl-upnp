@@ -204,8 +204,8 @@ erl_upnp_subscriber:stop(ClientPid).
 ## <a name="extending">Extending</a> ##
 
 This UPnP control point can be easily extended with more services support.<br/>
-Helpers to make request can be found in erl_upnp_helper module.<br/>
-3 examples how to use device discovering and make a request: `erl_upnp_igd`, `erl_upnp_subscriber` and `erl_upnp_rendering_control` (this one just for fun).
+Helpers to make request can be found in `erl_upnp_helper.erl` module.<br/>
+3 examples how to use device discovering and make a request: `erl_upnp_igd.erl`, `erl_upnp_subscriber.erl` and `erl_upnp_rendering_control.erl` (this one just for fun).
 
 ## <a name="tests">Tests</a> ##
 
