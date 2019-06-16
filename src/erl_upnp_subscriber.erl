@@ -155,9 +155,8 @@ stop(Pid) ->
 %%
 %%
 init([]) ->
-    TTL = 2,
     HttpId = {upnp_callback, self()},
-    {ok, ClientPid} = erl_upnp_client:start_discover_link(TTL, ssdp_all),
+    {ok, ClientPid} = erl_upnp_client:start_discover_link(ssdp_all, []),
     {ok, EventMgrPid} = gen_event:start_link(),
     {ok, HttpPid} = erl_upnp_subscriber_handler:start_http(EventMgrPid, HttpId),
     true = link(HttpPid),
@@ -506,7 +505,7 @@ do_recv(Socket, Length, Rest, Result, HeadersNeeded, ParseFun) ->
                         {ok, NewResult}        -> NewResult;
                         {need_more, NewResult} -> do_recv(Socket, Length, FullPacket, NewResult, HeadersNeeded, ParseFun)
                     end;
-                {ok, {http_response, _Vsn, 412, "Precondition Failed"}, ParsedPacket} ->
+                {ok, {http_response, _Vsn, 412, "Precondition Failed"}, _ParsedPacket} ->
                     Result;
                 {more, Length} ->
                     do_recv(Socket, Length, Packet, Result, HeadersNeeded, ParseFun);

@@ -11,3 +11,7 @@
 -type device()  :: map().
 -type service() :: map().
 -type entity()  :: device() | service().
+
+-define(DEFAULT_DELAY, 2).
+
+

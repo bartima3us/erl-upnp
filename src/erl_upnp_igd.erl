@@ -243,14 +243,13 @@ stop(Pid) ->
 %%
 %%
 init([]) ->
-    TTL = 2,
-    {ok, Pid} = erl_upnp_client:start_discover_link(TTL, ssdp_all),
+    {ok, Pid} = erl_upnp_client:start_discover_link(ssdp_all, []),
     State = #state{
         client_pid = Pid
     },
     Actions = [
         {next_event, internal, start},
-        {state_timeout, ?DELAY(TTL), get_services}
+        {state_timeout, ?DELAY(?DEFAULT_DELAY), get_services}
     ],
     {ok, waiting, State, Actions}.
 

@@ -25,16 +25,32 @@ erl_upnp_client:start_discover(ClientPid, Delay, Target).
 
 Start the client and network discovering in one step
 ```
-{ok, ClientPid} = erl_upnp_client:start_discover_link(Delay, Target).
+{ok, ClientPid} = erl_upnp_client:start_discover_link(Target, Opts).
 ```
 
 - ```Delay :: pos_integer()``` Time (in **seconds**) by which network should send responses. It is needed to avoid packets flood (network congestion). Recommended: 2.
 
 
-- ```Target :: ssdp_all``` Return all UPnP compatible devices and services from the network.
-- ```Target :: upnp_rootdevice``` Return all UPnP root devices from the network.
-- ```Target :: {uuid, string()}``` Return device with concrete UUID. UUID example: "429ec14c-8e4a-4074-89cc-01fc84e31e1f"
-- ```Target :: string()``` Some custom search request. Example: "urn:schemas-upnp-org:service:Layer3Forwarding:1"
+- ```Target```:
+    - ```Target :: ssdp_all``` Return all UPnP compatible devices and services from the network.
+    - ```Target :: upnp_rootdevice``` Return all UPnP root devices from the network.
+    - ```Target :: {uuid, string()}``` Return device with concrete UUID. UUID example: "429ec14c-8e4a-4074-89cc-01fc84e31e1f"
+    - ```Target :: string()``` Some custom search request. Example: "urn:schemas-upnp-org:service:Layer3Forwarding:1"
+
+
+- ```Opts :: [option()]```:
+    - ```{delay, Time :: pos_integer()}``` - The same as Delay in erl_upnp_client:start_discover/3 function. Default: 2.
+    - ```{poll, Time :: pos_integer()}``` - Time in **milliseconds**. Will poll network every `Time` milliseconds to search a new devices. Default: false (that means poll will occur only one time).
+
+Constant network polling can also be enabled by direct call
+```
+erl_upnp_client:start_poll(ClientPid, Time :: pos_integer()).
+```
+
+...and disabled
+```
+erl_upnp_client:stop_poll(ClientPid).
+```
 
 Return all entities from the state
 ```

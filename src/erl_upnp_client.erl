@@ -16,23 +16,27 @@
 
 -define(DELAY(S), S * 1000 + 100).
 
--type target()  :: ssdp_all | upnp_rootdevice | {uuid, string()} | string().
+-type target()      :: ssdp_all | upnp_rootdevice | {uuid, string()} | string().
+-type option_key()  :: poll | delay.
+-type option_val()  :: term().
+-type option()      :: {Option :: option_key(), Value :: option_val()}.
 
 -record(state, {
-    src_port                        :: inet:port_number(),
-    socket                          :: inet:socket(),
-    parser_pid                      :: pid(),
-    event_mgr_pid                   :: pid(),
-    devices                 = []    :: [device()],
-    unidentified_devices    = []    :: [term()],
-    delay                   = 2     :: pos_integer(),
-    last_target                     :: target()
+    src_port                                    :: inet:port_number(),
+    socket                                      :: inet:socket(),
+    parser_pid                                  :: pid(),
+    event_mgr_pid                               :: pid(),
+    devices                 = []                :: [device()],
+    unidentified_devices    = []                :: [term()],
+    delay                   = ?DEFAULT_DELAY    :: pos_integer(),
+    last_target                                 :: target(),
+    poll                    = false             :: false | pos_integer()
 }).
 
 %% API
 -export([
-    start_link/0,
     start_link/1,
+    start_link/2,
     start_discover_link/2,
     start_discover_link/3,
     start_discover/3,
@@ -41,6 +45,8 @@
     get_unidentified_devices/1,
     get_port/1,
     get_event_mgr_pid/1,
+    start_poll/2,
+    stop_poll/1,
     stop/1
 ]).
 
@@ -65,42 +71,45 @@
 %%  @doc
 %%  Starts the server.
 %%
--spec start_link() ->
+-spec start_link(
+    Opts :: [option()]
+) ->
     {ok, Pid :: pid()} |
     ignore |
     {error, Error :: term()}.
 
-start_link() ->
-    gen_statem:start_link(?MODULE, [0, waiting, undefined, undefined], []).
+start_link(Opts) ->
+    gen_statem:start_link(?MODULE, [0, waiting, undefined, Opts], []).
 
 
 %%  @doc
 %%  Starts the server.
 %%
 -spec start_link(
-    SrcPort :: inet:port_number()
+    SrcPort :: inet:port_number(),
+    Opts    :: [option()]
 ) ->
     {ok, Pid :: pid()} |
     ignore |
     {error, Error :: term()}.
 
-start_link(SrcPort) ->
-    gen_statem:start_link(?MODULE, [SrcPort, waiting, undefined, undefined], []).
+start_link(SrcPort, Opts) ->
+    gen_statem:start_link(?MODULE, [SrcPort, waiting, undefined, Opts], []).
 
 
 %%  @doc
 %%  Starts the server and discovery.
 %%
 -spec start_discover_link(
-    Delay   :: pos_integer(),
-    Target  :: target()
+    Target  :: target(),
+    Opts    :: [option()]
 ) ->
     {ok, Pid :: pid()} |
     ignore |
     {error, Error :: term()}.
 
-start_discover_link(Delay, Target) ->
-    gen_statem:start_link(?MODULE, [0, discovering, Delay, Target], []).
+start_discover_link(Target, Opts) ->
+    gen_statem:start_link(?MODULE, [0, discovering, Target, Opts], []).
 
 
 %%  @doc
@@ -108,15 +117,15 @@ start_discover_link(Delay, Target) ->
 %%
 -spec start_discover_link(
     SrcPort :: inet:port_number(),
-    Delay   :: pos_integer(),
-    Target  :: target()
+    Target  :: target(),
+    Opts    :: [option()]
 ) ->
     {ok, Pid :: pid()} |
     ignore |
     {error, Error :: term()}.
 
-start_discover_link(SrcPort, Delay, Target) ->
-    gen_statem:start_link(?MODULE, [SrcPort, discovering, Delay, Target], []).
+start_discover_link(SrcPort, Target, Opts) ->
+    gen_statem:start_link(?MODULE, [SrcPort, discovering, Target, Opts], []).
 
 
 %%  @doc
@@ -202,6 +211,31 @@ get_event_mgr_pid(Pid) ->
 
 
 %%  @doc
+%%  Starts polling network.
+%%
+-spec start_poll(
+    Pid     :: pid(),
+    Time    :: pos_integer()
+) ->
+    ok.
+
+start_poll(Pid, Time) ->
+    gen_statem:cast(Pid, {start_poll, Time}).
+
+
+%%  @doc
+%%  Stops polling.
+%%
+-spec stop_poll(
+    Pid :: pid()
+) ->
+    ok.
+
+stop_poll(Pid) ->
+    gen_statem:cast(Pid, stop_poll).
+
+
+%%  @doc
 %%  Stops the client.
 %%
 -spec stop(
@@ -233,18 +267,21 @@ message_parsed(Pid, Data) ->
 %%
 %%
 %%
-init([SrcPort, NextAction, Delay, Target]) ->
+init([SrcPort, NextAction, Target, Opts]) ->
     {ok, Socket} = gen_udp:open(SrcPort, [binary, {active, once}]),
     {ok, Port} = inet:port(Socket),
     {ok, EventMgrPid} = gen_event:start_link(),
     {ok, ParserPid} = erl_upnp_parser:start_link(EventMgrPid),
+    Poll = proplists:get_value(poll, Opts, false),
+    Delay = proplists:get_value(delay, Opts, ?DEFAULT_DELAY),
     State = #state{
         socket          = Socket,
         src_port        = Port,
         parser_pid      = ParserPid,
         delay           = Delay,
         last_target     = encode_target(Target),
-        event_mgr_pid   = EventMgrPid
+        event_mgr_pid   = EventMgrPid,
+        poll            = Poll
     },
     case NextAction of
         waiting     ->
@@ -295,8 +332,12 @@ handle_event(internal, start, discovering, SD) ->
 
 %
 %
-handle_event(state_timeout, stop_discover, discovering, SD) ->
-    {next_state, open, SD};
+handle_event(state_timeout, stop_discover, discovering, SD = #state{poll = Poll}) ->
+    Actions = case Poll of
+        Poll when is_integer(Poll)  -> [{{timeout, poll}, Poll, poll}];
+        _Other                      -> []
+    end,
+    {next_state, open, SD, Actions};
 
 %
 %
@@ -381,6 +422,16 @@ handle_event(cast, {message_parsed, {unidentified, Device}}, _, SD) ->
 
 %
 %
+handle_event(cast, {start_poll, Time}, _, SD) ->
+    {keep_state, SD#state{poll = Time}, [{{timeout, poll}, Time, poll}]};
+
+%
+%
+handle_event(cast, stop_poll, _, SD) ->
+    {keep_state, SD#state{poll = false}, [{{timeout, poll}, infinity, poll}]};
+
+%
+%
 handle_event({call, From}, {find_entity, unidentified}, _, #state{unidentified_devices = UD}) ->
     {keep_state_and_data, [{reply, From, {ok, UD}}]};
 
@@ -408,6 +459,24 @@ handle_event({call, From}, get_port, _, #state{src_port = Port}) ->
 %
 handle_event({call, From}, get_event_mgr_pid, _, #state{event_mgr_pid = Pid}) ->
     {keep_state_and_data, [{reply, From, Pid}]};
+
+%
+%
+handle_event({timeout, poll}, poll, open, SD) ->
+    #state{
+        socket      = Socket,
+        last_target = Target,
+        delay       = Delay,
+        poll        = Poll
+    } = SD,
+    BroadcastIP = erl_upnp_helper:get_broadcast_ip(),
+    BroadcastPort = erl_upnp_helper:get_broadcast_port(),
+    ok = discover(Socket, BroadcastIP, BroadcastPort, Target, Delay),
+    Actions = case Poll of
+        Poll when is_integer(Poll)  -> [{{timeout, poll}, Poll, poll}];
+        _Other                      -> []
+    end,
+    {keep_state, SD, Actions};
 
 %
 %
