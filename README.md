@@ -40,7 +40,7 @@ Start the client and network discovering in one step
 
 - ```Opts :: [option()]```:
     - ```{delay, TimeS :: pos_integer()}``` - The same as Delay in erl_upnp_client:start_discover/3 function. Default: 2.
-    - ```{poll, TimeMS :: pos_integer()}``` - Time in **milliseconds**. Will poll network every `TimeMS` milliseconds to search a new devices. Default: false (that means poll will occur only one time).
+    - ```{poll, TimeMS :: pos_integer()}``` - Time in **milliseconds**. Will poll network every `TimeMS` milliseconds to search for a new devices. Default: false (that means poll will occur only one time).
 
 Constant network polling can also be enabled by direct call
 ```
@@ -164,7 +164,7 @@ gen_event:add_handler(EventMgrPid, your_upnp_event_handler, []).
 ```
 
 Events which should be handled in the attached handler:
-- ```{state_var, Var, Val, Extra}``` - Will be sent when subscribed state variable is changed. `Extra` - is an extra data in proplist (keys: "SEQ", host", "SID"). **Warning!** First send will occur just after new subscription with current values of state variables, and that event SEQ will be 0. Every other event SEQ will be increased by 1.
+- ```{state_var, Var, Val, Extra}``` - Will be sent when subscribed state variable is changed. `Extra` - is an extra data in proplist (keys: "SEQ", host", "SID"). **Warning!** First send will occur just after new subscription with current values of state variables, and this first event SEQ will be 0. Every later event SEQ will be increased by 1.
 - ```{subscription_timeout, SID}``` - Will be sent when subscription time to live is over.
 
 Start subscription
@@ -173,8 +173,8 @@ erl_upnp_subscriber:subscribe(ClientPid, ServiceType, StateVariables, TTL).
 ```
 
 - ```ServiceType :: string()``` Service you want to subscribe. Example: "RenderingControl:1".
-- ```StateVariables :: [string()]``` List of state variable you want to subscribe. Empty list mean that all variables of that service will be subscribed. Example: ["LastChange"]. **Warning!** Not all devices supports state variables list. In that case this list will be ignored and all variables will be subscribed.
-- ```TTL :: pos_integer() | infinite``` Time to live for subscription in **seconds** or `infinite` atom. **Warning!** Since UPnP v2.0 "real" infinite subscription is not possible anymore so in case of this client, `infinite` subscription in reality is 30 minutes subscription which is constantly updated every time before end.
+- ```StateVariables :: [string()]``` List of state variable you want to subscribe. Empty list mean that all variables of that service will be subscribed. Example: ["LastChange"]. **Warning!** Not all devices support state variables list. In that case this list will be ignored and all variables will be subscribed.
+- ```TTL :: pos_integer() | infinite``` Time to live for subscription in **seconds** or `infinite` atom. **Warning!** Since UPnP v2.0 does not support "real" infinite subscription anymore, `infinite` subscription in reality (this client reality) is 30 minutes subscription which is constantly updated just before end.
 
 Example
 ```
@@ -186,7 +186,7 @@ Get current subscriptions
 erl_upnp_subscriber:get_subscriptions(ClientPid).
 ```
 
-Get subscriber callback link
+Get subscriber callback URL
 ```
 erl_upnp_subscriber:get_callback(ClientPid).
 ```
@@ -204,8 +204,8 @@ erl_upnp_subscriber:stop(ClientPid).
 ## <a name="extending">Extending</a> ##
 
 This UPnP control point can be easily extended with more services support.<br/>
-Helpers to make request can be found in `erl_upnp_helper.erl` module.<br/>
-3 examples how to use device discovering and make a request: `erl_upnp_igd.erl`, `erl_upnp_subscriber.erl` and `erl_upnp_rendering_control.erl` (this one just for fun).
+Helpers can be found in `erl_upnp_helper.erl` module.<br/>
+3 examples how to implement some behaviour using device discovering: `erl_upnp_igd.erl`, `erl_upnp_subscriber.erl` and `erl_upnp_rendering_control.erl` (this one just for fun).
 
 ## <a name="tests">Tests</a> ##
 
