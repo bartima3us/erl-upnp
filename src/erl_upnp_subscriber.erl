@@ -40,8 +40,8 @@
 -define(DELAY(S), S * 1000 + 150).
 -define(TIMEOUT, 5000).
 -define(MAX_TTL, 4233600). % seconds (49 days)
--define(INFINITE_TTL, 10). % seconds (30 min)
--define(REFRESH_INFINITE, 9500). % milliseconds (29 min 59.5 s)
+-define(INFINITE_TTL, 20). % seconds (30 min) % 1800
+-define(REFRESH_AFTER, 19500). % milliseconds (29 min) % 1740000
 
 -record(state, {
     client_pid                      :: pid(),
@@ -215,36 +215,70 @@ handle_event(state_timeout, {get_services, Service}, waiting, SD = #state{client
 %--------------------------------------------------------------------
 %   Open state
 %
-handle_event(Request, Msg = {subscribe, Service, StateVars, TTL}, open, SD) when
-    element(1, Request) =:= call;
-    element(1, Request) =:= timeout
-    ->
+handle_event({call, From}, {subscribe, Service, StateVars, TTL}, open, SD) ->
     #state{
         client_pid      = ClientPid,
         callback        = Callback,
-        subscriptions   = CurrSubs,
-        event_mgr_pid   = EventMgrPid
+        subscriptions   = CurrSubs
     } = SD,
-    Timeout = encode_args(ttl, TTL),
     {ok, FoundServices} = erl_upnp_client:find_entity(ClientPid, Service),
     ServiceStateVars = lists:map(fun (Srv) -> {Srv, StateVars} end, FoundServices),
-    Res = make_subscription(ServiceStateVars, Callback, Timeout),
-    TimeoutActions = get_timeout_actions(TTL, Msg, Res),
-    {NewSubs, ReplyAction} = case Request of
-        {call, From} ->
-            {CurrSubs ++ Res, [{reply, From, Res}]};
-        {timeout, {refresh_subscription, ParentUDN, OldSID}} ->
-            NewSID = find_sid_by_parent_udn(Res, ParentUDN),
-            gen_event:notify(EventMgrPid, {subscription_refresh, OldSID, NewSID}),
-            {remove_subscription(CurrSubs, OldSID) ++ Res, []}
-    end,
-    {keep_state, SD#state{subscriptions = NewSubs}, ReplyAction ++ TimeoutActions};
+    Res = make_subscription(ServiceStateVars, Callback, TTL),
+    TimeoutActions = get_timeout_actions(TTL, Res),
+    {keep_state, SD#state{subscriptions = CurrSubs ++ Res}, [{reply, From, Res} | TimeoutActions]};
 
 %
 %
-handle_event({call, From}, {unsubscribe, _Service}, open, SD = #state{subscriptions = Subs}) ->
-    Res = ok,
-    {keep_state, SD#state{subscriptions = Subs}, [{reply, From, Res}]};
+handle_event({timeout, {refresh_subscription, ParentUDN, SID}}, ServiceType, open, SD) ->
+    #state{
+        client_pid      = ClientPid,
+        subscriptions   = CurrSubs
+    } = SD,
+    TTL = infinite,
+    {ok, FoundServices} = erl_upnp_client:find_entity(ClientPid, ServiceType),
+    ok = make_subscription_refresh(FoundServices, ParentUDN, SID, TTL),
+    Actions = [{{timeout, {refresh_subscription, ParentUDN, SID}}, ?REFRESH_AFTER, ServiceType}],
+    {keep_state, SD#state{subscriptions = CurrSubs}, Actions};
+
+%
+%
+handle_event({call, From}, {unsubscribe, Service}, open, SD) ->
+    #state{
+        client_pid      = ClientPid,
+        subscriptions   = CurrSubs
+    } = SD,
+    {ok, FoundServices} = erl_upnp_client:find_entity(ClientPid, Service),
+    {NewSubs, TimersAction} = lists:foldl(
+        fun (Sub = {ServiceType, {ParentUDN, Data}}, {SubsAcc, TimersAcc}) ->
+            SID = proplists:get_value("SID", Data),
+            Stay = lists:foldl(
+                fun
+                    (Srv = #{service := SrvData}, true) ->
+                        ok = unsubscribe_request(Srv, SID),
+                        SrvParentUDN = proplists:get_value("parentUDN", SrvData),
+                        SrvServiceType = proplists:get_value("serviceType", SrvData),
+                        not (ServiceType =:= SrvServiceType andalso SrvParentUDN =:= ParentUDN);
+                    (_, false) ->
+                        false
+                end,
+                true,
+                FoundServices
+            ),
+            case Stay of
+                true  ->
+                    {[Sub | SubsAcc], TimersAcc};
+                false ->
+                     NewTimersAcc = case proplists:get_value("TTL", Data) of
+                        infinite    -> [{{timeout, {refresh_subscription, ParentUDN, SID}}, infinity, ok} | TimersAcc];
+                        _Secs       -> TimersAcc
+                    end,
+                    {SubsAcc, NewTimersAcc}
+            end
+        end,
+        {[], []},
+        CurrSubs
+    ),
+    {keep_state, SD#state{subscriptions = NewSubs}, [{reply, From, ok} | TimersAction]};
 
 %
 %
@@ -281,24 +315,8 @@ handle_event({call, From}, get_subscriptions, _, #state{subscriptions = Subscrip
 %%  @private
 %%  Encode arguments.
 %%
-encode_args(ttl, infinite) -> ?INFINITE_TTL;
-encode_args(ttl, Secs) when Secs =< ?MAX_TTL -> Secs.
-
-
-%%  @private
-%%  Find subscription by parent UDN.
-%%
-find_sid_by_parent_udn(Res, UDN) ->
-    lists:foldl(
-        fun
-            ({_Srv, {ParentUDN, Data}}, false) when ParentUDN =:= UDN ->
-                proplists:get_value("SID", Data);
-            (_Sub, Found) ->
-                Found
-        end,
-        false,
-        Res
-    ).
+encode_args(ttl, infinite) -> encode_args(ttl, ?INFINITE_TTL);
+encode_args(ttl, Secs) when is_integer(Secs), Secs =< ?MAX_TTL -> integer_to_list(Secs).
 
 
 %%  @private
@@ -318,20 +336,20 @@ remove_subscription(Subs, SID) ->
 %%  @private
 %%  Create a timers.
 %%
-get_timeout_actions(TTL, {subscribe, Service, StateVars, TTL}, Res) ->
+get_timeout_actions(TTL, Res) ->
     case TTL of
         infinite ->
             lists:foldl(
-                fun ({_Srv, {ParentUDN, Data}}, Acc) ->
+                fun ({ServiceType, {ParentUDN, Data}}, Acc) ->
                     SID = proplists:get_value("SID", Data),
-                    [{{timeout, {refresh_subscription, ParentUDN, SID}}, ?REFRESH_INFINITE, {subscribe, Service, StateVars, TTL}} | Acc]
+                    [{{timeout, {refresh_subscription, ParentUDN, SID}}, ?REFRESH_AFTER, ServiceType} | Acc]
                 end,
                 [],
                 Res
             );
         TTL      ->
             lists:foldl(
-                fun ({_Srv, {_ParentUDN, Data}}, Acc) ->
+                fun ({_ServiceType, {_ParentUDN, Data}}, Acc) ->
                     SID = proplists:get_value("SID", Data),
                     [{{timeout, remove_subscription}, TTL * 1000, SID} | Acc]
                 end,
@@ -367,9 +385,25 @@ make_subscription(ServiceStateVars, Callback, TTL) ->
 
 
 %%  @private
+%%  Make refresh of infinite subscription.
+%%
+make_subscription_refresh(FoundServices, ParentUDN, SID, TTL) ->
+    Timeout = encode_args(ttl, TTL),
+    lists:foreach(
+        fun (Service = #{service := Data}) ->
+            ok = case proplists:get_value("parentUDN", Data) of
+                ParentUDN  -> subscribe_refresh_request(Service, SID, Timeout);
+                _Other     -> ok
+            end
+        end,
+        FoundServices
+    ).
+
+
+%%  @private
 %%  Make a subscription request.
 %%
-subscribe_request(Service, StateVars, Callback, Timeout) ->
+subscribe_request(Service, StateVars, Callback, TTL) ->
     OS = case os:type() of
         {unix,  _} -> "Unix";
         {win32, _} -> "Windows"
@@ -382,8 +416,8 @@ subscribe_request(Service, StateVars, Callback, Timeout) ->
     end,
     AppVsn = erl_upnp_helper:get_app_vsn(erl_upnp),
     StateVarsEncoded = string:join(StateVars, ","),
-    TimeoutEncoded = integer_to_list(Timeout),
-    subscribe_request(Service, StateVarsEncoded, Callback, OS, OSVsn, AppVsn, TimeoutEncoded).
+    Timeout = encode_args(ttl, TTL),
+    [{"TTL", TTL} | subscribe_request(Service, StateVarsEncoded, Callback, OS, OSVsn, AppVsn, Timeout)].
 
 subscribe_request(#{service := Service}, StateVarsEncoded, Callback, OS, OSVsn, AppVsn, Timeout) ->
     EventUrl = proplists:get_value("eventSubURL", Service),
@@ -404,12 +438,55 @@ subscribe_request(#{service := Service}, StateVarsEncoded, Callback, OS, OSVsn, 
     {ok, ParsedHost} = inet:parse_address(Host),
     {ok, Socket} = gen_tcp:connect(ParsedHost, Port, [{active, false}, binary], ?TIMEOUT),
     ok = gen_tcp:send(Socket, Msg),
-    Result = do_recv(Socket, HeadersNeeded, fun decode_packet/2),
+    Result = do_recv(Socket, HeadersNeeded, fun decode_packet/3),
     ok = case proplists:get_value("Connection", Result, "keep-alive") of
         "close"      -> gen_tcp:close(Socket);
         "keep-alive" -> ok
     end,
     [{"host", {ParsedHost, Port}} | proplists:delete("Connection", Result)].
+
+
+%%  @private
+%%  Make a subscription refresh.
+%%
+subscribe_refresh_request(#{service := Service}, SID, Timeout) ->
+    EventUrl = proplists:get_value("eventSubURL", Service),
+    {ok, {_, _, Host, Port, Path, _}} = http_uri:parse(EventUrl),
+    Msg =
+        "SUBSCRIBE " ++ Path ++ " HTTP/1.1\r\n" ++
+        "HOST: " ++ Host ++ ":" ++ integer_to_list(Port) ++ "\r\n" ++
+        "SID: " ++ SID ++ "\r\n" ++
+        "TIMEOUT: Second-" ++ Timeout ++ "\r\n" ++
+        "\r\n",
+    {ok, ParsedHost} = inet:parse_address(Host),
+    {ok, Socket} = gen_tcp:connect(ParsedHost, Port, [{active, false}, binary], ?TIMEOUT),
+    ok = gen_tcp:send(Socket, Msg),
+    Result = do_recv(Socket, 0, fun (_, _, CurrRes) -> {ok, CurrRes} end),
+    ok = case proplists:get_value("Connection", Result, "keep-alive") of
+        "close"      -> gen_tcp:close(Socket);
+        "keep-alive" -> ok
+    end.
+
+
+%%  @private
+%%  Make unsubscribe request.
+%%
+unsubscribe_request(#{service := Service}, SID) ->
+    EventUrl = proplists:get_value("eventSubURL", Service),
+    {ok, {_, _, Host, Port, Path, _}} = http_uri:parse(EventUrl),
+    Msg =
+        "UNSUBSCRIBE " ++ Path ++ " HTTP/1.1\r\n" ++
+        "HOST: " ++ Host ++ ":" ++ integer_to_list(Port) ++ "\r\n" ++
+        "SID: " ++ SID ++ "\r\n" ++
+        "\r\n",
+    {ok, ParsedHost} = inet:parse_address(Host),
+    {ok, Socket} = gen_tcp:connect(ParsedHost, Port, [{active, false}, binary], ?TIMEOUT),
+    ok = gen_tcp:send(Socket, Msg),
+    Result = do_recv(Socket, 0, fun (_, _, CurrRes) -> {ok, CurrRes} end),
+    ok = case proplists:get_value("Connection", Result, "keep-alive") of
+        "close"      -> gen_tcp:close(Socket);
+        "keep-alive" -> ok
+    end.
 
 
 %%  @private
@@ -422,12 +499,15 @@ do_recv(Socket, Length, Rest, Result, HeadersNeeded, ParseFun) ->
     case gen_tcp:recv(Socket, Length, ?TIMEOUT) of
         {ok, Packet} ->
             case erlang:decode_packet(http, Packet, []) of
-                {ok, {http_response, _Vsn, 200, "OK"}, ParsedPacket} ->
+                {ok, {http_response, _Vsn, 200, OK}, ParsedPacket} ->
+                    "OK" = string:trim(OK),
                     FullPacket = <<Rest/binary, ParsedPacket/binary>>,
-                    case ParseFun(FullPacket, HeadersNeeded) of
+                    case ParseFun(FullPacket, HeadersNeeded, Result) of
                         {ok, NewResult}        -> NewResult;
                         {need_more, NewResult} -> do_recv(Socket, Length, FullPacket, NewResult, HeadersNeeded, ParseFun)
                     end;
+                {ok, {http_response, _Vsn, 412, "Precondition Failed"}, ParsedPacket} ->
+                    Result;
                 {more, Length} ->
                     do_recv(Socket, Length, Packet, Result, HeadersNeeded, ParseFun);
                 {error, Reason} ->
@@ -441,7 +521,7 @@ do_recv(Socket, Length, Rest, Result, HeadersNeeded, ParseFun) ->
 %%  @private
 %%  Decoding packets.
 %%
-decode_packet(Packet, HeadersNeeded) ->
+decode_packet(Packet, HeadersNeeded, _CurrResult) ->
     case re:split(Packet, "\\r\\n", [{return, list}]) of
         []  ->
             {need_more, Packet};
