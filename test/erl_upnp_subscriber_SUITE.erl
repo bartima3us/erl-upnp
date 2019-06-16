@@ -86,7 +86,6 @@ test_subscribe(_Config) ->
     {ok, ClientPid} = erl_upnp_subscriber:start_link(),
     EventMgrPid = erl_upnp_subscriber:get_event_mgr_pid(ClientPid),
     CallbackUrl = erl_upnp_subscriber:get_callback(ClientPid),
-%%    {ok, {_, _, Host, Port, _, _}} = http_uri:parse(CallbackUrl),
     NotifyBody = "<?xml version=\"1.0\" encoding=\"utf-8\"?>\r\n"
     "<e:propertyset xmlns:e=\"urn:schemas-upnp-org:event-1-0\">"
         "<e:property>"
