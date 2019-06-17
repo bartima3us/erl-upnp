@@ -111,25 +111,24 @@ form_request_test_() ->
         {"NewExternalPort", "6300"},
         {"NewProtocol", "TCP"}
     ],
+    Port = 43214,
     ServiceType = "urn:schemas-upnp-org:service:WANIPConnection:1",
     Result = #{
         body => "<?xml version=\"1.0\"?><s:Envelope xmlns:s=\"http://schemas.xmlsoap.org/soap/envelope/\" s:encodingStyle=\"http://schemas.xmlsoap.org/soap/encoding/\"><s:Body><u:GetSpecificPortMappingEntry xmlns:u=\"urn:schemas-upnp-org:service:WANIPConnection:1\"><NewRemoteHost></NewRemoteHost><NewExternalPort>6300</NewExternalPort><NewProtocol>TCP</NewProtocol></u:GetSpecificPortMappingEntry></s:Body></s:Envelope>",
         headers => [
             {"SOAPAction", "\"urn:schemas-upnp-org:service:WANIPConnection:1#GetSpecificPortMappingEntry\""},
-            {"Host", "192.168.1.149:43214"},
+            {"Host", inet:ntoa(erl_upnp_helper:get_internal_ip()) ++ ":" ++ integer_to_list(Port)},
             {"Content-Length", 395}
         ]
     },
     {setup,
         fun() ->
             ok = meck:new(erl_upnp_client),
-            ok = meck:new(erl_upnp_helper, [passthrough]),
-            ok = meck:expect(erl_upnp_helper, get_internal_ip, [], {192, 168, 1, 149}),
-            ok = meck:expect(erl_upnp_client, get_port, ['_'], 43214)
+            ok = meck:expect(erl_upnp_client, get_port, ['_'], Port)
         end,
         fun(_) ->
-            true = meck:validate([erl_upnp_helper, erl_upnp_client]),
-            ok = meck:unload([erl_upnp_helper, erl_upnp_client])
+            true = meck:validate(erl_upnp_client),
+            ok = meck:unload(erl_upnp_client)
         end,
         [{"Form SOAP request.",
             fun() ->
