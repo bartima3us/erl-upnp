@@ -131,18 +131,23 @@ handle_cast({parse_message, From, Message, DstIp, DstPort}, State) ->
             ok = gen_event:notify(EventMgrPid, {raw_entity_discovered, Info}),
             {unidentified, Info};
         Location  ->
-            {ok, {{_V, _C, _RP}, _Headers, Body}} = httpc:request(get, {Location, []}, [], [{body_format, string}]),
-            {ParsedDescription, _} = xmerl_scan:string(Body),
-            {URLBase, ExtraURLBase} = case xmerl_xpath:string("//root/URLBase/text()", ParsedDescription) of
-                []                        -> {Location, []};
-                [#xmlText{value = Base}]  -> {Base, [{"URLBase", Base}]}
-            end,
-            DeviceContent = xmerl_xpath:string("//root/device", ParsedDescription),
-            HierarchicalRes = #{device := Dev} = get_device_info(URLBase, filter_elements(DeviceContent, device)),
-            ExtraData = ExtraURLBase ++ [{"LOCATION", Location}, {"sender_ip", DstIp}, {"sender_port", DstPort}],
-            NewDevice = HierarchicalRes#{device => ExtraData ++ Dev},
-            ok = gen_event:notify(EventMgrPid, {device_discovered, NewDevice}),
-            {identified, NewDevice}
+            case httpc:request(get, {Location, []}, [], [{body_format, string}]) of
+                {ok, {{_V, 200, _RP}, _Headers, Body}} ->
+                    {ParsedDescription, _} = xmerl_scan:string(Body),
+                    {URLBase, ExtraURLBase} = case xmerl_xpath:string("//root/URLBase/text()", ParsedDescription) of
+                        []                        -> {Location, []};
+                        [#xmlText{value = Base}]  -> {Base, [{"URLBase", Base}]}
+                    end,
+                    DeviceContent = xmerl_xpath:string("//root/device", ParsedDescription),
+                    HierarchicalRes = #{device := Dev} = get_device_info(URLBase, filter_elements(DeviceContent, device)),
+                    ExtraData = ExtraURLBase ++ [{"LOCATION", Location}, {"sender_ip", DstIp}, {"sender_port", DstPort}],
+                    NewDevice = HierarchicalRes#{device => ExtraData ++ Dev},
+                    ok = gen_event:notify(EventMgrPid, {device_discovered, NewDevice}),
+                    {identified, NewDevice};
+                _Other ->
+                    ok = gen_event:notify(EventMgrPid, {raw_entity_discovered, Info}),
+                    {unidentified, Info}
+            end
     end,
     ok = erl_upnp_client:message_parsed(From, Result),
     {noreply, State}.

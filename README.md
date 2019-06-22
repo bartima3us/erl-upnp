@@ -70,7 +70,7 @@ erl_upnp_client:find_entity(ClientPid, Key).
 
 - ```Key :: string()``` Key is a device or service type with or without version, or a full service type. Key examples: "InternetGatewayDevice", "Layer3Forwarding:1", "WANDevice:2", "urn:schemas-upnp-org:service:Layer3Forwarding:1".
 
-Return all unidentified entities
+Return all unidentified entities (which don't have a LOCATION header or which LOCATION link is not working for some reason)
 ```
 erl_upnp_client:get_unidentified_devices(ClientPid).
 ```
